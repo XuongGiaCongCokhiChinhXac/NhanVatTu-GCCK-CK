@@ -128,6 +128,47 @@
       .tonghop-only{ display:none !important; }
     }
 
+    /* ===== TAB TỔNG HỢP: full màn hình, 2 cột, không khoảng trắng ===== */
+    #tab-tonghop{
+      display:flex;
+      width:100%;
+      align-items:stretch;
+      background:var(--card);
+    }
+    #tab-tonghop.hidden{ display:none !important; }
+
+    .tonghop-col{
+      flex:1 1 50%;
+      display:flex;
+      flex-direction:column;
+      min-width:0;
+      border-right:1px solid var(--border);
+    }
+    .tonghop-col:last-child{ border-right:none; }
+
+    .tonghop-col-header{
+      background:linear-gradient(135deg,var(--blue),var(--blue-dark));
+      color:#fff; padding:14px 16px; font-weight:700; font-size:14px;
+      display:flex; align-items:center; gap:8px;
+      position:sticky; top:64px; z-index:5;
+    }
+    .tonghop-col:last-child .tonghop-col-header{
+      background:linear-gradient(135deg,var(--green),var(--green-dark));
+    }
+
+    .tonghop-table-wrap{
+      flex:1;
+      overflow:auto;
+      height:calc(100vh - 128px);
+    }
+    .tonghop-table-wrap table{
+      width:100%;
+      border-collapse:collapse;
+    }
+    .tonghop-table-wrap thead th{
+      position:sticky; top:0; z-index:4;
+    }
+
     .hidden{ display:none !important; }
     .section-title{ font-size:13px; font-weight:700; color:var(--muted); margin:0 0 10px; text-transform:uppercase; letter-spacing:.4px;}
   </style>
@@ -267,28 +308,28 @@
       </div>
     </div>
 
-    <!-- ===== TAB TỔNG HỢP (chỉ desktop) ===== -->
-    <div id="tab-tonghop" class="hidden">
-      <div class="card">
-        <div class="section-title">📥 Tổng hợp Nhận vật tư</div>
-        <div class="table-wrap">
-          <table class="data-table" id="tonghop-nhan-table">
-            <thead><tr><th>LSX-STT</th><th>Chi tiết</th><th>SL/ĐH</th><th>Đã nhận</th><th>Trạng thái</th></tr></thead>
-            <tbody><tr class="empty-row"><td colspan="5">Đang tải...</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="card">
-        <div class="section-title">🚚 Tổng hợp Giao hàng</div>
-        <div class="table-wrap">
-          <table class="data-table" id="tonghop-giao-table">
-            <thead><tr><th>LSX-STT</th><th>Chi tiết</th><th>SL/ĐH</th><th>Đã giao</th><th>Trạng thái</th></tr></thead>
-            <tbody><tr class="empty-row"><td colspan="5">Đang tải...</td></tr></tbody>
-          </table>
-        </div>
+  </div>
+
+  <!-- ===== TAB TỔNG HỢP (chỉ desktop, full màn hình, nằm ngoài .container) ===== -->
+  <div id="tab-tonghop" class="hidden">
+    <div class="tonghop-col">
+      <div class="tonghop-col-header">📥 TỔNG HỢP NHẬN VẬT TƯ</div>
+      <div class="tonghop-table-wrap">
+        <table class="data-table" id="tonghop-nhan-table">
+          <thead><tr><th>LSX-STT</th><th>Chi tiết</th><th>SL/ĐH</th><th>Đã nhận</th><th>Trạng thái</th></tr></thead>
+          <tbody><tr class="empty-row"><td colspan="5">Đang tải...</td></tr></tbody>
+        </table>
       </div>
     </div>
-
+    <div class="tonghop-col">
+      <div class="tonghop-col-header">🚚 TỔNG HỢP GIAO HÀNG</div>
+      <div class="tonghop-table-wrap">
+        <table class="data-table" id="tonghop-giao-table">
+          <thead><tr><th>LSX-STT</th><th>Chi tiết</th><th>SL/ĐH</th><th>Đã giao</th><th>Trạng thái</th></tr></thead>
+          <tbody><tr class="empty-row"><td colspan="5">Đang tải...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <datalist id="userlist"></datalist>
