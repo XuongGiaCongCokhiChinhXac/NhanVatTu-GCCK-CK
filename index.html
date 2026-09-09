@@ -149,7 +149,8 @@
     .tonghop-col-header{
       background:linear-gradient(135deg,var(--blue),var(--blue-dark));
       color:#fff; padding:14px 16px; font-weight:700; font-size:14px;
-      display:flex; align-items:center; gap:8px;
+      display:flex; align-items:center; justify-content:center; gap:8px;
+      text-align:center;
       position:sticky; top:64px; z-index:5;
     }
     .tonghop-col:last-child .tonghop-col-header{
@@ -176,14 +177,14 @@
 <body>
 
   <header>
-    <h1 id="pageTitle">🚚 GIAO HÀNG</h1>
+    <h1 id="pageTitle">📊 TỔNG HỢP</h1>
     <div class="sub">Quản lý vật tư sản xuất</div>
   </header>
 
   <div class="container">
 
     <!-- ===== TAB GIAO HÀNG ===== -->
-    <div id="tab-giao">
+    <div id="tab-giao" class="hidden">
       <div class="mode-switch">
         <button id="giao-mode-qr" class="active" onclick="setMode('giao','qr')">📷 Quét QR</button>
         <button id="giao-mode-manual" onclick="setMode('giao','manual')">⌨️ Nhập tay</button>
@@ -311,22 +312,22 @@
   </div>
 
   <!-- ===== TAB TỔNG HỢP (chỉ desktop, full màn hình, nằm ngoài .container) ===== -->
-  <div id="tab-tonghop" class="hidden">
+  <div id="tab-tonghop">
     <div class="tonghop-col">
-      <div class="tonghop-col-header">📥 TỔNG HỢP NHẬN VẬT TƯ</div>
+      <div class="tonghop-col-header">📦 TỔNG HỢP NHẬN VẬT TƯ</div>
       <div class="tonghop-table-wrap">
         <table class="data-table" id="tonghop-nhan-table">
-          <thead><tr><th>LSX-STT</th><th>Chi tiết</th><th>SL/ĐH</th><th>Đã nhận</th><th>Trạng thái</th></tr></thead>
-          <tbody><tr class="empty-row"><td colspan="5">Đang tải...</td></tr></tbody>
+          <thead><tr><th>LSX-STT</th><th>Chi tiết</th><th>SL/ĐH</th><th>Đã nhận</th><th>Người nhận</th><th>Trạng thái</th></tr></thead>
+          <tbody><tr class="empty-row"><td colspan="6">Đang tải...</td></tr></tbody>
         </table>
       </div>
     </div>
     <div class="tonghop-col">
-      <div class="tonghop-col-header">🚚 TỔNG HỢP GIAO HÀNG</div>
+      <div class="tonghop-col-header">🚛 TỔNG HỢP GIAO HÀNG</div>
       <div class="tonghop-table-wrap">
         <table class="data-table" id="tonghop-giao-table">
-          <thead><tr><th>LSX-STT</th><th>Chi tiết</th><th>SL/ĐH</th><th>Đã giao</th><th>Trạng thái</th></tr></thead>
-          <tbody><tr class="empty-row"><td colspan="5">Đang tải...</td></tr></tbody>
+          <thead><tr><th>LSX-STT</th><th>Chi tiết</th><th>SL/ĐH</th><th>Đã giao</th><th>Người giao</th><th>Trạng thái</th></tr></thead>
+          <tbody><tr class="empty-row"><td colspan="6">Đang tải...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -335,13 +336,13 @@
   <datalist id="userlist"></datalist>
 
   <nav class="tabs">
-    <button id="navGiao" class="active" onclick="showTab('giao')">
-      <span class="ic">🚚</span>Giao hàng
+    <button id="navGiao" onclick="showTab('giao')">
+      <span class="ic">🚛</span>Giao hàng
     </button>
     <button id="navNhan" onclick="showTab('nhan')">
-      <span class="ic">📥</span>Nhận vật tư
+      <span class="ic">📦</span>Nhận vật tư
     </button>
-    <button id="navTonghop" class="tonghop-only" onclick="showTab('tonghop')">
+    <button id="navTonghop" class="tonghop-only active tonghop-active" onclick="showTab('tonghop')">
       <span class="ic">📊</span>Tổng hợp
     </button>
   </nav>
@@ -349,13 +350,14 @@
   <div id="toast" class="toast"></div>
 
   <script>
-    let currentTab = 'giao';
+    let currentTab = 'tonghop';
     let scanners = { giao: null, nhan: null };
     let scannerRunning = { giao: false, nhan: false };
     let pending = { giao: [], nhan: [] }; // danh sách chờ lưu của từng tab
 
     let versions = { giao: -1, nhan: -1 }; // -1 để lần đầu luôn tải dữ liệu
     let pollTimer = null;
+    let summaryCache = null; // lưu sẵn dữ liệu tổng hợp, vào tab là thấy ngay, không cần chờ tải
 
     // ---- Ghi nhớ tên người dùng gần nhất ----
     window.addEventListener('DOMContentLoaded', function () {
@@ -374,6 +376,13 @@
 
       loadHistory('giao');
       loadHistory('nhan');
+      loadSummary(); // tải sẵn dữ liệu Tổng hợp ngay khi mở app -> vào tab là thấy ngay, không phải chờ
+
+      // Trên điện thoại (màn hình hẹp) tự chuyển về tab Giao hàng vì tab Tổng hợp chỉ dành cho desktop
+      if (window.innerWidth <= 820) {
+        showTab('giao');
+      }
+
       startPolling();
     });
 
@@ -416,24 +425,29 @@
             }
           }).getUpdates(tab, versions[tab]);
         });
-        if (currentTab === 'tonghop') loadSummary();
+        loadSummary(); // luôn cập nhật ngầm mỗi 8s, để dữ liệu Tổng hợp luôn sẵn sàng dù đang ở tab nào
       }, 8000); // 8 giây/lần — đủ nhanh để cảm giác "realtime", không tốn quota
     }
 
     // ---- Bảng Tổng hợp ----
     function loadSummary() {
       google.script.run.withSuccessHandler(function (list) {
-        renderSummaryTable('tonghop-nhan-table', list, 'tongNhan', 'trangThaiNhan');
-        renderSummaryTable('tonghop-giao-table', list, 'tongGiao', 'trangThaiGiao');
+        summaryCache = list; // ghi vào cache để lần sau vào tab hiện ngay, không cần tải lại
+        renderAllSummaryTables(list);
       }).withFailureHandler(function (err) {
         showToast('Lỗi tải tổng hợp: ' + (err.message || err), true);
       }).getSummary();
     }
 
-    function renderSummaryTable(tableId, list, sumField, statusField) {
+    function renderAllSummaryTables(list) {
+      renderSummaryTable('tonghop-nhan-table', list, 'tongNhan', 'nguoiNhanGanNhat', 'trangThaiNhan');
+      renderSummaryTable('tonghop-giao-table', list, 'tongGiao', 'nguoiGiaoGanNhat', 'trangThaiGiao');
+    }
+
+    function renderSummaryTable(tableId, list, sumField, personField, statusField) {
       const tbody = document.querySelector('#' + tableId + ' tbody');
       if (!list || !list.length) {
-        tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Chưa có dữ liệu.</td></tr>';
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Chưa có dữ liệu.</td></tr>';
         return;
       }
       tbody.innerHTML = list.map(function (it) {
@@ -445,6 +459,7 @@
           '<td>' + chiTiet + '</td>' +
           '<td>' + (it.slDh || '-') + '</td>' +
           '<td><b>' + it[sumField] + '</b></td>' +
+          '<td>' + (it[personField] || '-') + '</td>' +
           '<td class="' + cls + '">' + it[statusField] + '</td>' +
           '</tr>';
       }).join('');
@@ -463,14 +478,19 @@
       document.getElementById('navTonghop').classList.toggle('tonghop-active', tab === 'tonghop');
 
       document.getElementById('pageTitle').innerText =
-        tab === 'giao' ? '🚚 GIAO HÀNG' : tab === 'nhan' ? '📥 NHẬN VẬT TƯ' : '📊 TỔNG HỢP';
+        tab === 'giao' ? '🚛 GIAO HÀNG' : tab === 'nhan' ? '📦 NHẬN VẬT TƯ' : '📊 TỔNG HỢP';
 
       // dừng scanner của các tab không dùng tới
       ['giao', 'nhan'].forEach(function (t) {
         if (t !== tab && scannerRunning[t]) stopScanner(t);
       });
 
-      if (tab === 'tonghop') loadSummary();
+      if (tab === 'tonghop') {
+        // Có cache -> hiện ngay lập tức, không cần chờ
+        if (summaryCache) renderAllSummaryTables(summaryCache);
+        // Vẫn âm thầm tải mới nhất phía sau để đảm bảo dữ liệu luôn chính xác
+        loadSummary();
+      }
     }
 
     function setMode(tab, mode) {
