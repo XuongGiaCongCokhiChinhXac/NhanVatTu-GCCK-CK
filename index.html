@@ -4,7 +4,7 @@
   <base target="_top">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <script src="https://cdn.jsdelivr.net/gh/mebjas/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
     :root{
       --blue:#1a56db;
@@ -100,6 +100,7 @@
       padding:9px 8px; white-space:nowrap;
     }
     .data-table td{ padding:8px; border-top:1px solid var(--border); white-space:nowrap; }
+    .data-table td:nth-child(2){ max-width:120px; overflow:hidden; text-overflow:ellipsis; }
     .data-table tbody tr:nth-child(even){ background:#f8fafc; }
     .data-table .empty-row td{ color:var(--muted); text-align:center; white-space:normal; }
     .data-table .rm-btn{ border:none; background:transparent; color:var(--danger); font-weight:700; font-size:15px; cursor:pointer; padding:0 4px; }
