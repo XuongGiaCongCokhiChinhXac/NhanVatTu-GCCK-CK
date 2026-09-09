@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <script src="https://cdn.jsdelivr.net/gh/mebjas/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    :root{
+      --blue:#1a56db;
+      --blue-dark:#173e8a;
+      --green:#0e9f6e;
+      --green-dark:#0a7a54;
+      --bg:#f2f4f7;
+      --card:#ffffff;
+      --text:#1f2937;
+      --muted:#6b7280;
+      --border:#e5e7eb;
+      --danger:#dc2626;
+    }
+    *{box-sizing:border-box;}
+    html,body{margin:0;padding:0;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:var(--text);}
+    body{padding-bottom:76px;}
+
+    header{
+      position:sticky; top:0; z-index:20;
+      background:linear-gradient(135deg,var(--blue),var(--blue-dark));
+      color:#fff; padding:16px 16px 14px;
+      text-align:center;
+    }
+    header h1{margin:0;font-size:18px;font-weight:700;letter-spacing:.3px;}
+    header .sub{font-size:12px;opacity:.85;margin-top:2px;}
+
+    .container{padding:14px;max-width:520px;margin:0 auto;}
+
+    .mode-switch{
+      display:flex; background:#e9edf3; border-radius:12px; padding:4px; margin-bottom:14px;
+    }
+    .mode-switch button{
+      flex:1; border:none; background:transparent; padding:10px 6px; border-radius:9px;
+      font-size:14px; font-weight:600; color:var(--muted); cursor:pointer;
+    }
+    .mode-switch button.active{
+      background:var(--card); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.15);
+    }
+
+    .card{
+      background:var(--card); border-radius:14px; padding:16px;
+      box-shadow:0 1px 4px rgba(0,0,0,.06); margin-bottom:14px; border:1px solid var(--border);
+    }
+
+    .scan-btn{
+      width:100%; padding:14px; border:none; border-radius:12px;
+      font-size:15px; font-weight:700; color:#fff; cursor:pointer; margin-bottom:6px;
+    }
+    #qr-reader{ width:100%; border-radius:12px; overflow:hidden; margin-top:10px; }
+    #qr-reader__scan_region img{ display:none; }
+
+    .field{margin-bottom:12px;}
+    .field label{display:block; font-size:12.5px; font-weight:600; color:var(--muted); margin-bottom:5px; text-transform:uppercase; letter-spacing:.3px;}
+    .field input, .field select{
+      width:100%; padding:12px 12px; font-size:16px; border-radius:10px;
+      border:1.5px solid var(--border); background:#fafbfc; color:var(--text);
+    }
+    .field input:focus, .field select:focus{ outline:none; border-color:var(--blue); background:#fff; }
+    .field input[readonly]{ background:#f0f2f5; color:var(--muted); }
+    .row2{ display:flex; gap:10px; }
+    .row2 .field{ flex:1; }
+
+    .qr-preview{
+      background:#eef2ff; border:1px dashed #93a5e8; border-radius:10px;
+      padding:10px 12px; font-size:12.5px; color:var(--blue-dark); margin-bottom:12px; display:none;
+    }
+    .qr-preview.show{ display:block; }
+
+    .submit-btn{
+      width:100%; padding:15px; border:none; border-radius:12px;
+      font-size:16px; font-weight:700; color:#fff; cursor:pointer;
+    }
+    .submit-btn:disabled{ opacity:.6; }
+
+    .clear-btn{
+      width:100%; padding:11px; margin-top:8px; border-radius:12px; border:1.5px solid var(--border);
+      background:transparent; color:var(--muted); font-weight:600; font-size:14px; cursor:pointer;
+    }
+
+    .toast{
+      position:fixed; left:50%; bottom:90px; transform:translate(-50%,20px);
+      background:var(--text); color:#fff; padding:12px 18px; border-radius:12px;
+      font-size:14px; font-weight:600; opacity:0; transition:.25s; z-index:100; max-width:88%; text-align:center;
+      box-shadow:0 4px 14px rgba(0,0,0,.25);
+    }
+    .toast.show{ opacity:1; transform:translate(-50%,0); }
+    .toast.error{ background:var(--danger); }
+
+    .table-wrap{ overflow-x:auto; border-radius:10px; border:1px solid var(--border); }
+    .data-table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+    .data-table th{
+      background:var(--blue); color:#fff; font-weight:700; text-align:left;
+      padding:9px 8px; white-space:nowrap;
+    }
+    .data-table td{ padding:8px; border-top:1px solid var(--border); white-space:nowrap; }
+    .data-table tbody tr:nth-child(even){ background:#f8fafc; }
+    .data-table .empty-row td{ color:var(--muted); text-align:center; white-space:normal; }
+    .data-table .rm-btn{ border:none; background:transparent; color:var(--danger); font-weight:700; font-size:15px; cursor:pointer; padding:0 4px; }
+
+    nav.tabs{
+      position:fixed; bottom:0; left:0; right:0; display:flex;
+      background:#fff; border-top:1px solid var(--border); z-index:30;
+      box-shadow:0 -2px 8px rgba(0,0,0,.06);
+    }
+    nav.tabs button{
+      flex:1; border:none; background:transparent; padding:11px 4px 9px; cursor:pointer;
+      display:flex; flex-direction:column; align-items:center; gap:3px;
+      color:var(--muted); font-size:12px; font-weight:600;
+    }
+    nav.tabs button .ic{ font-size:20px; }
+    nav.tabs button.active{ color:var(--blue); }
+    nav.tabs button.active.nhan-active{ color:var(--green-dark); }
+
+    .hidden{ display:none !important; }
+    .section-title{ font-size:13px; font-weight:700; color:var(--muted); margin:0 0 10px; text-transform:uppercase; letter-spacing:.4px;}
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1 id="pageTitle">🚚 GIAO HÀNG</h1>
+    <div class="sub">Quản lý vật tư sản xuất</div>
+  </header>
+
+  <div class="container">
+
+    <!-- ===== TAB GIAO HÀNG ===== -->
+    <div id="tab-giao">
+      <div class="mode-switch">
+        <button id="giao-mode-qr" class="active" onclick="setMode('giao','qr')">📷 Quét QR</button>
+        <button id="giao-mode-manual" onclick="setMode('giao','manual')">⌨️ Nhập tay</button>
+      </div>
+
+      <div class="card" id="giao-qr-card">
+        <button class="scan-btn" style="background:var(--blue)" id="giao-scan-btn" onclick="toggleScanner('giao')">📷 Bắt đầu quét QR</button>
+        <div id="qr-reader-giao"></div>
+      </div>
+
+      <div class="card">
+        <div id="giao-qr-preview" class="qr-preview"></div>
+
+        <div id="giao-auto-fields" class="hidden">
+          <div class="field"><label>Mã số chi tiết (MSCT)</label><input id="giao-msct" readonly></div>
+          <div class="field"><label>Tên chi tiết</label><input id="giao-ten" readonly></div>
+          <div class="field"><label>Số lượng đặt hàng (SL/ĐH)</label><input id="giao-sldh" readonly></div>
+        </div>
+
+        <div class="row2">
+          <div class="field"><label>Lệnh sản xuất (LSX)</label><input id="giao-lsx" placeholder="VD: TBNN.1027/07"></div>
+          <div class="field"><label>STT</label><input id="giao-stt" type="text" inputmode="numeric" placeholder="VD: 50"></div>
+        </div>
+
+        <div class="field">
+          <label>Số lượng giao</label>
+          <input id="giao-sl" type="number" inputmode="decimal" placeholder="Nhập số lượng giao">
+        </div>
+
+        <button class="submit-btn" style="background:var(--blue)" onclick="addToList('giao')">➕ Thêm vào danh sách</button>
+        <button class="clear-btn" onclick="resetForm('giao')">Xóa / Nhập lại</button>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Danh sách chờ lưu (<span id="giao-pending-count">0</span>)</div>
+        <div class="table-wrap">
+          <table class="data-table" id="giao-pending-table">
+            <thead><tr><th>LSX-STT</th><th>Chi tiết</th><th>SL/ĐH</th><th>Giao</th><th></th></tr></thead>
+            <tbody><tr class="empty-row"><td colspan="5">Chưa có mục nào.</td></tr></tbody>
+          </table>
+        </div>
+
+        <div class="field" style="margin-top:12px;">
+          <label>Người giao</label>
+          <input id="giao-nguoi" list="userlist" placeholder="Tên người giao hàng">
+        </div>
+
+        <button class="submit-btn" style="background:var(--blue)" onclick="saveAll('giao')">💾 Lưu tất cả (<span id="giao-save-count">0</span>)</button>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Vừa ghi nhận (Giao hàng)</div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>LSX-STT</th><th>Chi tiết</th><th>SL/ĐH</th><th>Giao</th><th>Ngày</th><th>Người</th></tr></thead>
+            <tbody id="giao-history"><tr class="empty-row"><td colspan="6">Chưa có dữ liệu.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== TAB NHẬN VẬT TƯ ===== -->
+    <div id="tab-nhan" class="hidden">
+      <div class="mode-switch">
+        <button id="nhan-mode-qr" class="active" onclick="setMode('nhan','qr')">📷 Quét QR</button>
+        <button id="nhan-mode-manual" onclick="setMode('nhan','manual')">⌨️ Nhập tay</button>
+      </div>
+
+      <div class="card" id="nhan-qr-card">
+        <button class="scan-btn" style="background:var(--green)" id="nhan-scan-btn" onclick="toggleScanner('nhan')">📷 Bắt đầu quét QR</button>
+        <div id="qr-reader-nhan"></div>
+      </div>
+
+      <div class="card">
+        <div id="nhan-qr-preview" class="qr-preview"></div>
+
+        <div id="nhan-auto-fields" class="hidden">
+          <div class="field"><label>Mã số chi tiết (MSCT)</label><input id="nhan-msct" readonly></div>
+          <div class="field"><label>Tên chi tiết</label><input id="nhan-ten" readonly></div>
+          <div class="field"><label>Số lượng đặt hàng (SL/ĐH)</label><input id="nhan-sldh" readonly></div>
+        </div>
+
+        <div class="row2">
+          <div class="field"><label>Lệnh sản xuất (LSX)</label><input id="nhan-lsx" placeholder="VD: TBNN.1027/07"></div>
+          <div class="field"><label>STT</label><input id="nhan-stt" type="text" inputmode="numeric" placeholder="VD: 50"></div>
+        </div>
+
+        <div class="field">
+          <label>Số lượng nhận</label>
+          <input id="nhan-sl" type="number" inputmode="decimal" placeholder="Nhập số lượng nhận">
+        </div>
+
+        <button class="submit-btn" style="background:var(--green)" onclick="addToList('nhan')">➕ Thêm vào danh sách</button>
+        <button class="clear-btn" onclick="resetForm('nhan')">Xóa / Nhập lại</button>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Danh sách chờ lưu (<span id="nhan-pending-count">0</span>)</div>
+        <div class="table-wrap">
+          <table class="data-table" id="nhan-pending-table">
+            <thead><tr><th>LSX-STT</th><th>Chi tiết</th><th>SL/ĐH</th><th>Nhận</th><th></th></tr></thead>
+            <tbody><tr class="empty-row"><td colspan="5">Chưa có mục nào.</td></tr></tbody>
+          </table>
+        </div>
+
+        <div class="field" style="margin-top:12px;">
+          <label>Người nhận</label>
+          <input id="nhan-nguoi" list="userlist" placeholder="Tên người nhận vật tư">
+        </div>
+
+        <button class="submit-btn" style="background:var(--green)" onclick="saveAll('nhan')">💾 Lưu tất cả (<span id="nhan-save-count">0</span>)</button>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Vừa ghi nhận (Nhận vật tư)</div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>LSX-STT</th><th>Chi tiết</th><th>SL/ĐH</th><th>Nhận</th><th>Ngày</th><th>Người</th></tr></thead>
+            <tbody id="nhan-history"><tr class="empty-row"><td colspan="6">Chưa có dữ liệu.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <datalist id="userlist"></datalist>
+
+  <nav class="tabs">
+    <button id="navGiao" class="active" onclick="showTab('giao')">
+      <span class="ic">🚚</span>Giao hàng
+    </button>
+    <button id="navNhan" onclick="showTab('nhan')">
+      <span class="ic">📥</span>Nhận vật tư
+    </button>
+  </nav>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    let currentTab = 'giao';
+    let scanners = { giao: null, nhan: null };
+    let scannerRunning = { giao: false, nhan: false };
+    let pending = { giao: [], nhan: [] }; // danh sách chờ lưu của từng tab
+
+    // ---- Ghi nhớ tên người dùng gần nhất ----
+    window.addEventListener('DOMContentLoaded', function () {
+      const savedName = localStorage.getItem('vt_nguoi') || '';
+      document.getElementById('giao-nguoi').value = savedName;
+      document.getElementById('nhan-nguoi').value = savedName;
+
+      google.script.run.withSuccessHandler(function (list) {
+        const dl = document.getElementById('userlist');
+        (list || []).forEach(function (name) {
+          const opt = document.createElement('option');
+          opt.value = name;
+          dl.appendChild(opt);
+        });
+      }).getUserList();
+    });
+
+    function showTab(tab) {
+      currentTab = tab;
+      document.getElementById('tab-giao').classList.toggle('hidden', tab !== 'giao');
+      document.getElementById('tab-nhan').classList.toggle('hidden', tab !== 'nhan');
+      document.getElementById('navGiao').classList.toggle('active', tab === 'giao');
+      document.getElementById('navNhan').classList.toggle('active', tab === 'nhan');
+      document.getElementById('navNhan').classList.toggle('nhan-active', tab === 'nhan');
+      document.getElementById('pageTitle').innerText = tab === 'giao' ? '🚚 GIAO HÀNG' : '📥 NHẬN VẬT TƯ';
+      // dừng scanner của tab không dùng
+      const other = tab === 'giao' ? 'nhan' : 'giao';
+      if (scannerRunning[other]) stopScanner(other);
+    }
+
+    function setMode(tab, mode) {
+      document.getElementById(tab + '-mode-qr').classList.toggle('active', mode === 'qr');
+      document.getElementById(tab + '-mode-manual').classList.toggle('active', mode === 'manual');
+      document.getElementById(tab + '-qr-card').classList.toggle('hidden', mode !== 'qr');
+      if (mode === 'manual' && scannerRunning[tab]) stopScanner(tab);
+      if (mode === 'manual') {
+        document.getElementById(tab + '-auto-fields').classList.add('hidden');
+        document.getElementById(tab + '-qr-preview').classList.remove('show');
+      }
+    }
+
+    function toggleScanner(tab) {
+      if (scannerRunning[tab]) { stopScanner(tab); return; }
+      startScanner(tab);
+    }
+
+    function startScanner(tab) {
+      const elId = 'qr-reader-' + tab;
+      const btn = document.getElementById(tab + '-scan-btn');
+      scanners[tab] = new Html5Qrcode(elId);
+      Html5Qrcode.getCameras().then(function (devices) {
+        if (!devices || !devices.length) { showToast('Không tìm thấy camera trên thiết bị.', true); return; }
+        const camId = devices.find(d => /back|rear|environment/i.test(d.label))?.id || devices[devices.length - 1].id;
+        scanners[tab].start(
+          camId,
+          { fps: 10, qrbox: { width: 240, height: 240 } },
+          function (decodedText) { onScanSuccess(tab, decodedText); },
+          function () {}
+        ).then(function () {
+          scannerRunning[tab] = true;
+          btn.innerText = '⏹ Dừng quét';
+        }).catch(function (err) {
+          showToast('Không mở được camera: ' + err, true);
+        });
+      }).catch(function (err) {
+        showToast('Cần cấp quyền camera để quét QR.', true);
+      });
+    }
+
+    function stopScanner(tab) {
+      if (scanners[tab]) {
+        scanners[tab].stop().then(function () {
+          scanners[tab].clear();
+          scannerRunning[tab] = false;
+          document.getElementById(tab + '-scan-btn').innerText = '📷 Bắt đầu quét QR';
+        }).catch(function () {
+          scannerRunning[tab] = false;
+        });
+      }
+    }
+
+    function onScanSuccess(tab, text) {
+      // Định dạng QR: LSX|STT|MSCT|Tên chi tiết|SL/ĐH
+      const parts = text.split('|').map(s => s.trim());
+      if (parts.length < 5) {
+        showToast('Mã QR không đúng định dạng.', true);
+        return;
+      }
+      const [lsx, stt, msct, ten, sldh] = parts;
+
+      document.getElementById(tab + '-lsx').value = lsx;
+      document.getElementById(tab + '-stt').value = stt;
+      document.getElementById(tab + '-msct').value = msct;
+      document.getElementById(tab + '-ten').value = ten;
+      document.getElementById(tab + '-sldh').value = sldh;
+      document.getElementById(tab + '-sl').value = sldh; // mặc định = SL/ĐH, cho phép sửa
+
+      document.getElementById(tab + '-auto-fields').classList.remove('hidden');
+      const prev = document.getElementById(tab + '-qr-preview');
+      prev.innerText = '✅ Đã quét: ' + lsx + ' - STT ' + stt + ' - ' + ten;
+      prev.classList.add('show');
+
+      stopScanner(tab);
+      showToast('Đã đọc mã QR. Kiểm tra số lượng rồi bấm "Thêm vào danh sách".');
+      document.getElementById(tab + '-sl').focus();
+    }
+
+    // ---- Thêm 1 món (từ QR hoặc nhập tay) vào danh sách chờ lưu ----
+    // Bắt buộc: LSX, STT, Số lượng — thiếu 1 trong 3 sẽ không cho thêm.
+    function addToList(tab) {
+      const lsx = document.getElementById(tab + '-lsx').value.trim();
+      const stt = document.getElementById(tab + '-stt').value.trim();
+      const sl  = document.getElementById(tab + '-sl').value.trim();
+
+      if (!lsx || !stt) { showToast('Bắt buộc nhập LSX và STT.', true); return; }
+      if (!sl || isNaN(Number(sl)) || Number(sl) <= 0) {
+        showToast('Bắt buộc nhập Số lượng ' + (tab === 'giao' ? 'giao' : 'nhận') + ' hợp lệ.', true);
+        return;
+      }
+
+      pending[tab].push({
+        lsx: lsx, stt: stt,
+        msct: document.getElementById(tab + '-msct').value.trim(),
+        tenChiTiet: document.getElementById(tab + '-ten').value.trim(),
+        slDh: document.getElementById(tab + '-sldh').value.trim(),
+        sl: sl
+      });
+
+      renderPending(tab);
+      resetForm(tab);
+      showToast('Đã thêm vào danh sách. Có thể quét/nhập tiếp món khác.');
+    }
+
+    function removeFromList(tab, idx) {
+      pending[tab].splice(idx, 1);
+      renderPending(tab);
+    }
+
+    function renderPending(tab) {
+      const tbody = document.querySelector('#' + tab + '-pending-table tbody');
+      document.getElementById(tab + '-pending-count').innerText = pending[tab].length;
+      document.getElementById(tab + '-save-count').innerText = pending[tab].length;
+
+      if (!pending[tab].length) {
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Chưa có mục nào.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = pending[tab].map(function (it, idx) {
+        const chiTiet = it.tenChiTiet || it.msct || '-';
+        const sldh = it.slDh !== '' ? it.slDh : '-';
+        return '<tr>' +
+          '<td>' + it.lsx + '-' + it.stt + '</td>' +
+          '<td>' + chiTiet + '</td>' +
+          '<td>' + sldh + '</td>' +
+          '<td><b>' + it.sl + '</b></td>' +
+          '<td><button class="rm-btn" onclick="removeFromList(\'' + tab + '\',' + idx + ')">✕</button></td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    // ---- Lưu tất cả 1 lần: cập nhật giao diện NGAY LẬP TỨC, ghi Sheet chạy NGẦM ----
+    function saveAll(tab) {
+      const nguoi = document.getElementById(tab + '-nguoi').value.trim();
+      if (!pending[tab].length) { showToast('Danh sách đang trống.', true); return; }
+      if (!nguoi) { showToast('Vui lòng nhập tên người thực hiện.', true); return; }
+
+      localStorage.setItem('vt_nguoi', nguoi);
+
+      const items = pending[tab].slice();
+      const ngay = new Date().toLocaleDateString('vi-VN');
+
+      // 1) Hiển thị realtime ngay lập tức (optimistic UI)
+      items.forEach(function (it) {
+        addHistoryRow(tab, {
+          lsxStt: it.lsx + '-' + it.stt, tenChiTiet: it.tenChiTiet, msct: it.msct,
+          slDh: it.slDh, sl: it.sl, nguoi: nguoi, ngay: ngay
+        });
+      });
+      pending[tab] = [];
+      renderPending(tab);
+      showToast('Đang lưu ' + items.length + ' mục...');
+
+      // 2) Ghi thật vào Google Sheet ở nền, không chặn thao tác của người dùng
+      google.script.run
+        .withSuccessHandler(function (res) { showToast(res.message); })
+        .withFailureHandler(function (err) {
+          showToast('Lỗi khi lưu vào Sheet: ' + (err.message || err), true);
+        })
+        .submitBatch(tab, nguoi, items);
+    }
+
+    function resetForm(tab) {
+      document.getElementById(tab + '-lsx').value = '';
+      document.getElementById(tab + '-stt').value = '';
+      document.getElementById(tab + '-sl').value = '';
+      document.getElementById(tab + '-msct').value = '';
+      document.getElementById(tab + '-ten').value = '';
+      document.getElementById(tab + '-sldh').value = '';
+      document.getElementById(tab + '-auto-fields').classList.add('hidden');
+      document.getElementById(tab + '-qr-preview').classList.remove('show');
+    }
+
+    function addHistoryRow(tab, row) {
+      const tbody = document.getElementById(tab + '-history');
+      if (tbody.querySelector('.empty-row')) tbody.innerHTML = '';
+      const chiTiet = row.tenChiTiet || row.msct || '-';
+      const sldh = row.slDh !== '' ? row.slDh : '-';
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + row.lsxStt + '</td>' +
+        '<td>' + chiTiet + '</td>' +
+        '<td>' + sldh + '</td>' +
+        '<td><b>' + row.sl + '</b></td>' +
+        '<td>' + row.ngay + '</td>' +
+        '<td>' + row.nguoi + '</td>';
+      tbody.prepend(tr);
+      while (tbody.children.length > 15) tbody.removeChild(tbody.lastChild);
+    }
+
+    let toastTimer;
+    function showToast(msg, isError) {
+      const t = document.getElementById('toast');
+      t.innerText = msg;
+      t.classList.toggle('error', !!isError);
+      t.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(function () { t.classList.remove('show'); }, 3000);
+    }
+  </script>
+</body>
+</html>
