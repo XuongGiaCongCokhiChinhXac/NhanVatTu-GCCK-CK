@@ -278,6 +278,24 @@
   <div id="toast" class="toast"></div>
 
   <script>
+    // ====== CẤU HÌNH KẾT NỐI ĐẾN APPS SCRIPT WEB APP ======
+    // Dán URL kết thúc bằng /exec lấy từ: Apps Script > Triển khai > Quản lý các bản triển khai
+    const API_URL = 'https://script.google.com/macros/s/AKfycbxPre7nEY7CyPHNb36ygQyVhtGXE7k9hkUfo8NgaWn7NWU3RGZU74jvHYAxg8h0aqUpcw/exec';
+
+    function callApi(action, payload) {
+      return fetch(API_URL, {
+        method: 'POST',
+        // text/plain để trình duyệt KHÔNG gửi preflight OPTIONS (Apps Script không xử lý OPTIONS)
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(Object.assign({ action: action }, payload || {}))
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (res) {
+          if (!res.ok) throw new Error(res.error || 'Lỗi không xác định từ server.');
+          return res.data;
+        });
+    }
+
     let currentTab = 'giao';
     let scanners = { giao: null, nhan: null };
     let scannerRunning = { giao: false, nhan: false };
@@ -292,14 +310,16 @@
       document.getElementById('giao-nguoi').value = savedName;
       document.getElementById('nhan-nguoi').value = savedName;
 
-      google.script.run.withSuccessHandler(function (list) {
+      callApi('getUserList').then(function (list) {
         const dl = document.getElementById('userlist');
         (list || []).forEach(function (name) {
           const opt = document.createElement('option');
           opt.value = name;
           dl.appendChild(opt);
         });
-      }).getUserList();
+      }).catch(function (err) {
+        console.error('Không tải được danh sách người dùng:', err);
+      });
 
       loadHistory('giao');
       loadHistory('nhan');
@@ -310,10 +330,12 @@
 
     // ---- Đồng bộ dữ liệu cho MỌI người dùng (polling nhẹ, dùng version) ----
     function loadHistory(tab) {
-      google.script.run.withSuccessHandler(function (res) {
+      callApi('getUpdates', { type: tab, sinceVersion: versions[tab] }).then(function (res) {
         versions[tab] = res.version;
         if (res.history) renderHistoryFromServer(tab, res.history);
-      }).getUpdates(tab, versions[tab]);
+      }).catch(function (err) {
+        console.error('Không tải được dữ liệu ' + tab + ':', err);
+      });
     }
 
     function renderHistoryFromServer(tab, rows) {
@@ -340,12 +362,14 @@
       if (pollTimer) clearInterval(pollTimer);
       pollTimer = setInterval(function () {
         ['giao', 'nhan'].forEach(function (tab) {
-          google.script.run.withSuccessHandler(function (res) {
+          callApi('getUpdates', { type: tab, sinceVersion: versions[tab] }).then(function (res) {
             if (res.changed) {
               versions[tab] = res.version;
               renderHistoryFromServer(tab, res.history);
             }
-          }).getUpdates(tab, versions[tab]);
+          }).catch(function (err) {
+            console.error('Lỗi đồng bộ ' + tab + ':', err);
+          });
         });
       }, 8000); // 8 giây/lần — đủ nhanh để cảm giác "realtime", không tốn quota
     }
@@ -521,15 +545,14 @@
       showToast('Đang lưu ' + items.length + ' mục...');
 
       // 2) Ghi thật vào Google Sheet ở nền, không chặn thao tác của người dùng
-      google.script.run
-        .withSuccessHandler(function (res) {
+      callApi('submitBatch', { type: tab, nguoi: nguoi, items: items })
+        .then(function (res) {
           showToast(res.message);
           loadHistory(tab); // đồng bộ ngay với dữ liệu thật trên Sheet, không cần chờ vòng poll tiếp theo
         })
-        .withFailureHandler(function (err) {
-          showToast('Lỗi khi lưu vào Sheet: ' + (err.message || err), true);
-        })
-        .submitBatch(tab, nguoi, items);
+        .catch(function (err) {
+          showToast('Lỗi khi lưu vào Sheet: ' + err.message, true);
+        });
     }
 
     function resetForm(tab) {
