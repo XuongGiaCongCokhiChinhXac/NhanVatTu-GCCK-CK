@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
   <style>
     :root{
       --blue:#1a56db;
@@ -134,6 +135,7 @@
 
     .hidden{ display:none !important; }
     .section-title{ font-size:13px; font-weight:700; color:var(--muted); margin:0 0 10px; text-transform:uppercase; letter-spacing:.4px;}
+    .photo-btn{ display:block; text-align:center; background:#475569; margin-top:8px; }
   </style>
 </head>
 <body>
@@ -154,6 +156,8 @@
 
       <div class="card" id="giao-qr-card">
         <button class="scan-btn" style="background:var(--blue)" id="giao-scan-btn" onclick="toggleScanner('giao')">📷 Bắt đầu quét QR</button>
+<label class="scan-btn photo-btn" for="photo-giao">🖼️ Đọc từ nhiều ảnh QR</label>
+<input type="file" id="photo-giao" class="hidden" accept="image/*" multiple onchange="handlePhotos('giao', this)">
         <div class="scan-stage hidden" id="scan-stage-giao">
   <video id="video-giao" playsinline muted></video>
   <canvas id="overlay-giao"></canvas>
@@ -221,6 +225,8 @@
 
       <div class="card" id="nhan-qr-card">
         <button class="scan-btn" style="background:var(--green)" id="nhan-scan-btn" onclick="toggleScanner('nhan')">📷 Bắt đầu quét QR</button>
+<label class="scan-btn photo-btn" for="photo-nhan">🖼️ Đọc từ nhiều ảnh QR</label>
+<input type="file" id="photo-nhan" class="hidden" accept="image/*" multiple onchange="handlePhotos('nhan', this)">
         <div class="scan-stage hidden" id="scan-stage-nhan">
   <video id="video-nhan" playsinline muted></video>
   <canvas id="overlay-nhan"></canvas>
@@ -461,7 +467,7 @@ async function startScanner(tab) {
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
     });
 
     // Bật tự động lấy nét liên tục nếu thiết bị hỗ trợ (Android)
@@ -544,22 +550,91 @@ async function detectFrame(st) {
     } catch (e) { st.detector = null; } // lỗi thì chuyển sang jsQR
   }
 
-  // Dự phòng: jsQR (dùng cho iPhone/Safari)
-  const scale = Math.min(1, 1280 / w);
-  const cw = Math.round(w * scale), ch = Math.round(h * scale);
+    // Dự phòng cho máy không có BarcodeDetector (iPhone/Safari, máy đời cũ).
+  // Luân phiên 2 kiểu quét: (A) cắt vùng giữa ở độ phân giải gốc, (B) toàn khung thu nhỏ.
+  st.pass = (st.pass || 0) + 1;
+  let sx = 0, sy = 0, sw = w, sh = h, maxSide = 1280;
+  if (st.pass % 2 === 1) {
+    const side = Math.round(Math.min(w, h) * 0.75);
+    sw = side; sh = side;
+    sx = Math.round((w - side) / 2);
+    sy = Math.round((h - side) / 2);
+    maxSide = 1100;
+  }
+  const scale = Math.min(1, maxSide / Math.max(sw, sh));
+  const cw = Math.round(sw * scale), ch = Math.round(sh * scale);
   const cv = st.work;
   cv.width = cw; cv.height = ch;
   const ctx = cv.getContext('2d', { willReadFrequently: true });
-  ctx.drawImage(v, 0, 0, cw, ch);
+  ctx.drawImage(v, sx, sy, sw, sh, 0, 0, cw, ch);
+
   const img = ctx.getImageData(0, 0, cw, ch);
+  enhanceContrast(img.data);          // chuyển xám + kéo giãn tương phản
+  ctx.putImageData(img, 0, 0);
+
+  function mapPt(x, y) { return [x / scale + sx, y / scale + sy]; }
+
+  // Thử lần 1: ZXing
+  if (typeof ZXing !== 'undefined') {
+    try {
+      if (!st.zx) {
+        const hints = new Map();
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
+        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+        st.zx = new ZXing.MultiFormatReader();
+        st.zx.setHints(hints);
+      }
+      const lum = new ZXing.HTMLCanvasElementLuminanceSource(cv);
+      const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+      const r = st.zx.decode(bmp);
+      const pts = r.getResultPoints().map(function (p) { return mapPt(p.getX(), p.getY()); });
+      return { text: r.getText(), points: boxFromPoints(pts) };
+    } catch (e) { /* không thấy QR, thử jsQR */ }
+  }
+
+  // Thử lần 2: jsQR
   const code = jsQR(img.data, cw, ch, { inversionAttempts: 'dontInvert' });
   if (!code) return null;
   const l = code.location;
   return {
     text: code.data,
     points: [l.topLeftCorner, l.topRightCorner, l.bottomRightCorner, l.bottomLeftCorner]
-      .map(function (p) { return [p.x / scale, p.y / scale]; })
+      .map(function (p) { return mapPt(p.x, p.y); })
   };
+}
+
+// Chuyển ảnh xám và kéo giãn độ tương phản (giúp QR mờ/xám rõ nét hơn)
+function enhanceContrast(d) {
+  const hist = new Uint32Array(256);
+  const n = d.length / 4;
+  for (let i = 0; i < d.length; i += 4) {
+    const g = (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8;
+    d[i] = d[i + 1] = d[i + 2] = g;
+    hist[g]++;
+  }
+  let lo = 0, hi = 255, acc = 0;
+  for (let i = 0; i < 256; i++) { acc += hist[i]; if (acc > n * 0.02) { lo = i; break; } }
+  acc = 0;
+  for (let i = 255; i >= 0; i--) { acc += hist[i]; if (acc > n * 0.02) { hi = i; break; } }
+  if (hi - lo < 30) return;
+  const k = 255 / (hi - lo);
+  for (let i = 0; i < d.length; i += 4) {
+    let g = (d[i] - lo) * k;
+    g = g < 0 ? 0 : (g > 255 ? 255 : g);
+    d[i] = d[i + 1] = d[i + 2] = g;
+  }
+}
+
+// ZXing trả về tâm 3 góc định vị, hàm này vẽ khung chữ nhật bao quanh QR
+function boxFromPoints(pts) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  pts.forEach(function (p) {
+    minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]);
+    minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]);
+  });
+  const pad = Math.max(maxX - minX, maxY - minY) * 0.14;
+  minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+  return [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY]];
 }
 
 function drawBox(st, pts) {
@@ -654,6 +729,16 @@ function stopScanner(tab) {
       resetForm(tab);
     }
 
+    function updatePendingQty(tab, idx, val) {
+  const n = Number(val);
+  if (!val || isNaN(n) || n <= 0) {
+    showToast('Số lượng phải lớn hơn 0.', true);
+    renderPending(tab); // trả về giá trị cũ
+    return;
+  }
+  pending[tab][idx].sl = String(val).trim();
+}
+
     function removeFromList(tab, idx) {
       pending[tab].splice(idx, 1);
       renderPending(tab);
@@ -675,7 +760,9 @@ function stopScanner(tab) {
           '<td>' + it.lsx + '-' + it.stt + '</td>' +
           '<td>' + chiTiet + '</td>' +
           '<td>' + sldh + '</td>' +
-          '<td><b>' + it.sl + '</b></td>' +
+          '<td><input type="number" inputmode="decimal" value="' + it.sl + '" ' +
+            'style="width:72px;padding:6px;font-size:14px;font-weight:700;border:1.5px solid var(--border);border-radius:8px;" ' +
+            'onchange="updatePendingQty(\'' + tab + '\',' + idx + ',this.value)"></td>' +
           '<td><button class="rm-btn" onclick="removeFromList(\'' + tab + '\',' + idx + ')">✕</button></td>' +
           '</tr>';
       }).join('');
@@ -741,14 +828,172 @@ function stopScanner(tab) {
       while (tbody.children.length > 15) tbody.removeChild(tbody.lastChild);
     }
 
+    // ================= ĐỌC NHIỀU ẢNH QR CÙNG LÚC =================
+let zxReader = null;
+
+function loadBitmap(file) {
+  return new Promise(function (resolve, reject) {
+    if (window.createImageBitmap) {
+      createImageBitmap(file, { imageOrientation: 'from-image' }).then(resolve).catch(function () { viaImg(); });
+    } else viaImg();
+    function viaImg() {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = function () { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Không mở được ảnh')); };
+      img.src = url;
+    }
+  });
+}
+
+function zxDecode(cv) {
+  if (typeof ZXing === 'undefined') return null;
+  try {
+    if (!zxReader) {
+      const hints = new Map();
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      zxReader = new ZXing.MultiFormatReader();
+      zxReader.setHints(hints);
+    }
+    const lum = new ZXing.HTMLCanvasElementLuminanceSource(cv);
+    const r = zxReader.decode(new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum)));
+    const p = r.getResultPoints().map(function (q) { return [q.getX(), q.getY()]; });
+    const xs = p.map(function (q) { return q[0]; }), ys = p.map(function (q) { return q[1]; });
+    const x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs);
+    const y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+    const pad = Math.max(x1 - x0, y1 - y0) * 0.25;
+    return { text: r.getText(), box: [x0 - pad, y0 - pad, x1 + pad, y1 + pad] };
+  } catch (e) { return null; }
+}
+
+function jsqrDecode(cv, ctx) {
+  if (typeof jsQR === 'undefined') return null;
+  const w = cv.width, h = cv.height;
+  const img = ctx.getImageData(0, 0, w, h);
+  let c = jsQR(img.data, w, h, { inversionAttempts: 'dontInvert' });
+  if (!c) {
+    enhanceContrast(img.data);
+    c = jsQR(img.data, w, h, { inversionAttempts: 'dontInvert' });
+  }
+  if (!c) return null;
+  const l = c.location;
+  const xs = [l.topLeftCorner.x, l.topRightCorner.x, l.bottomRightCorner.x, l.bottomLeftCorner.x];
+  const ys = [l.topLeftCorner.y, l.topRightCorner.y, l.bottomRightCorner.y, l.bottomLeftCorner.y];
+  const x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs);
+  const y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+  const pad = Math.max(x1 - x0, y1 - y0) * 0.05;
+  return { text: c.data, box: [x0 - pad, y0 - pad, x1 + pad, y1 + pad] };
+}
+
+// Đọc 1 vùng của ảnh; đọc được QR nào thì tô trắng QR đó rồi đọc tiếp (để tách nhiều QR trong 1 vùng)
+async function decodeRegion(src, sx, sy, sw, sh, maxSide, detector, found) {
+  const scale = Math.min(1, maxSide / Math.max(sw, sh));
+  const cv = document.createElement('canvas');
+  cv.width = Math.max(1, Math.round(sw * scale));
+  cv.height = Math.max(1, Math.round(sh * scale));
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(src, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
+
+  if (detector) {
+    try {
+      const codes = await detector.detect(cv);
+      let n = 0;
+      codes.forEach(function (c) { if (c.rawValue) { found.add(c.rawValue); n++; } });
+      if (n) return;
+    } catch (e) {}
+  }
+  for (let k = 0; k < 8; k++) {
+    const r = zxDecode(cv) || jsqrDecode(cv, ctx);
+    if (!r) break;
+    found.add(r.text);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(r.box[0], r.box[1], r.box[2] - r.box[0], r.box[3] - r.box[1]);
+  }
+}
+
+// Đọc 1 ảnh: quét toàn ảnh, rồi chia ô chồng lấn để bắt thêm QR nhỏ/xa
+async function decodeImage(src, detector) {
+  const W = src.naturalWidth || src.width, H = src.naturalHeight || src.height;
+  const found = new Set();
+
+  await decodeRegion(src, 0, 0, W, H, 1600, detector, found);
+
+  async function tiles(n) {
+    const tw = W / n, th = H / n, ov = 0.15;
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        const x0 = Math.max(0, Math.floor(j * tw - tw * ov));
+        const y0 = Math.max(0, Math.floor(i * th - th * ov));
+        const x1 = Math.min(W, Math.ceil((j + 1) * tw + tw * ov));
+        const y1 = Math.min(H, Math.ceil((i + 1) * th + th * ov));
+        await decodeRegion(src, x0, y0, x1 - x0, y1 - y0, 1400, detector, found);
+        await new Promise(function (r) { setTimeout(r, 0); });
+      }
+    }
+  }
+  await tiles(2);
+  if (!found.size) await tiles(3);
+  return Array.from(found);
+}
+
+async function handlePhotos(tab, input) {
+  const files = Array.from(input.files || []);
+  input.value = ''; // cho phép chọn lại cùng ảnh lần sau
+  if (!files.length) return;
+
+  let detector = null;
+  try { if ('BarcodeDetector' in window) detector = new BarcodeDetector({ formats: ['qr_code'] }); } catch (e) {}
+
+  let added = 0, dup = 0, bad = 0;
+  const failed = [];
+  const seen = new Set(pending[tab].map(function (it) { return it.lsx + '-' + it.stt; }));
+
+  for (let i = 0; i < files.length; i++) {
+    showToast('Đang đọc ảnh ' + (i + 1) + '/' + files.length + '...', false, 60000);
+    await new Promise(function (r) { setTimeout(r, 30); });
+
+    let texts = [];
+    try {
+      const src = await loadBitmap(files[i]);
+      texts = await decodeImage(src, detector);
+      if (src.close) src.close();
+    } catch (e) { texts = []; }
+
+    if (!texts.length) { failed.push(i + 1); continue; }
+
+    texts.forEach(function (text) {
+      // Định dạng QR: LSX|STT|MSCT|Tên chi tiết|SL/ĐH
+      const parts = text.split('|').map(function (s) { return s.trim(); });
+      if (parts.length < 5) { bad++; return; }
+      const lsx = parts[0], stt = parts[1], msct = parts[2], ten = parts[3], sldh = parts[4];
+      const q = Number(sldh);
+      if (!lsx || !stt || isNaN(q) || q <= 0) { bad++; return; }
+      const key = lsx + '-' + stt;
+      if (seen.has(key)) { dup++; return; }
+      seen.add(key);
+      pending[tab].push({ lsx: lsx, stt: stt, msct: msct, tenChiTiet: ten, slDh: sldh, sl: sldh });
+      added++;
+    });
+  }
+
+  renderPending(tab);
+
+  let msg = '✅ Đã thêm ' + added + ' mục vào danh sách';
+  if (dup) msg += ' · bỏ qua ' + dup + ' mã trùng';
+  if (bad) msg += ' · ' + bad + ' mã sai định dạng';
+  if (failed.length) msg += ' · không đọc được ảnh số ' + failed.join(', ');
+  showToast(msg, !!(failed.length || bad || !added), 6000);
+}
+
     let toastTimer;
-    function showToast(msg, isError) {
+    function showToast(msg, isError, ms) {
       const t = document.getElementById('toast');
       t.innerText = msg;
       t.classList.toggle('error', !!isError);
       t.classList.add('show');
       clearTimeout(toastTimer);
-      toastTimer = setTimeout(function () { t.classList.remove('show'); }, 3000);
+      toastTimer = setTimeout(function () { t.classList.remove('show'); }, ms || 3000);
     }
   </script>
 </body>
