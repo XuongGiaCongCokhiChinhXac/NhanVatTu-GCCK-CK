@@ -600,14 +600,12 @@ function stopScanner(tab) {
       document.getElementById(tab + '-sldh').value = sldh;
       document.getElementById(tab + '-sl').value = sldh; // mặc định = SL/ĐH, cho phép sửa
 
-      document.getElementById(tab + '-auto-fields').classList.remove('hidden');
-      const prev = document.getElementById(tab + '-qr-preview');
-      prev.innerText = '✅ Đã quét: ' + lsx + ' - STT ' + stt + ' - ' + ten;
-      prev.classList.add('show');
-
+      // Các ô MSCT / Tên / SL-ĐH vẫn được điền ngầm (đang ẩn) để lưu vào Sheet,
+      // trên màn hình chỉ hiện 3 ô: LSX, STT, Số lượng.
       stopScanner(tab);
-      if (document.activeElement) document.activeElement.blur(); // đảm bảo không bật bàn phím
-      showToast('Đã đọc mã QR. Kiểm tra số lượng rồi bấm "Thêm vào danh sách".');
+      if (document.activeElement) document.activeElement.blur(); // không bật bàn phím
+      stopScanner(tab);
+      if (document.activeElement) document.activeElement.blur(); // không bật bàn phím
     }
 
     // ---- Thêm 1 món (từ QR hoặc nhập tay) vào danh sách chờ lưu ----
@@ -633,7 +631,6 @@ function stopScanner(tab) {
 
       renderPending(tab);
       resetForm(tab);
-      showToast('Đã thêm vào danh sách. Có thể quét/nhập tiếp món khác.');
     }
 
     function removeFromList(tab, idx) {
@@ -683,7 +680,6 @@ function stopScanner(tab) {
       });
       pending[tab] = [];
       renderPending(tab);
-      showToast('Đang lưu ' + items.length + ' mục...');
 
       // 2) Ghi thật vào Google Sheet ở nền, không chặn thao tác của người dùng
       callApi('submitBatch', { type: tab, nguoi: nguoi, items: items })
