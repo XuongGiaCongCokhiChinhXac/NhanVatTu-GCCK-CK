@@ -4,7 +4,7 @@
   <base target="_top">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <style>
     :root{
       --blue:#1a56db;
@@ -53,8 +53,17 @@
       width:100%; padding:14px; border:none; border-radius:12px;
       font-size:15px; font-weight:700; color:#fff; cursor:pointer; margin-bottom:6px;
     }
-    #qr-reader{ width:100%; border-radius:12px; overflow:hidden; margin-top:10px; }
-    #qr-reader__scan_region img{ display:none; }
+    .scan-stage{
+  position:relative; width:100%; aspect-ratio:3/4; margin-top:10px;
+  border-radius:14px; overflow:hidden; background:#000;
+}
+.scan-stage video{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.scan-stage canvas{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+.scan-hint{
+  position:absolute; left:50%; bottom:12px; transform:translateX(-50%);
+  background:rgba(0,0,0,.55); color:#fff; font-size:12.5px; font-weight:600;
+  padding:6px 12px; border-radius:20px; white-space:nowrap; pointer-events:none;
+}
 
     .field{margin-bottom:12px;}
     .field label{display:block; font-size:12.5px; font-weight:600; color:var(--muted); margin-bottom:5px; text-transform:uppercase; letter-spacing:.3px;}
@@ -130,7 +139,7 @@
 <body>
 
   <header>
-    <h1 id="pageTitle">📊 TỔNG HỢP</h1>
+    <h1 id="pageTitle">📦 NHẬN VẬT TƯ</h1>
     <div class="sub">Quản lý vật tư sản xuất</div>
   </header>
 
@@ -145,7 +154,11 @@
 
       <div class="card" id="giao-qr-card">
         <button class="scan-btn" style="background:var(--blue)" id="giao-scan-btn" onclick="toggleScanner('giao')">📷 Bắt đầu quét QR</button>
-        <div id="qr-reader-giao"></div>
+        <div class="scan-stage hidden" id="scan-stage-giao">
+  <video id="video-giao" playsinline muted autoplay></video>
+  <canvas id="overlay-giao"></canvas>
+  <div class="scan-hint">Đưa mã QR vào camera, app tự nhận diện</div>
+</div>
       </div>
 
       <div class="card">
@@ -208,7 +221,11 @@
 
       <div class="card" id="nhan-qr-card">
         <button class="scan-btn" style="background:var(--green)" id="nhan-scan-btn" onclick="toggleScanner('nhan')">📷 Bắt đầu quét QR</button>
-        <div id="qr-reader-nhan"></div>
+        <div class="scan-stage hidden" id="scan-stage-nhan">
+  <video id="video-nhan" playsinline muted autoplay></video>
+  <canvas id="overlay-nhan"></canvas>
+  <div class="scan-hint">Đưa mã QR vào camera, app tự nhận diện</div>
+</div>
       </div>
 
       <div class="card">
@@ -267,13 +284,13 @@
   <datalist id="userlist"></datalist>
 
   <nav class="tabs">
-    <button id="navGiao" class="active" onclick="showTab('giao')">
-      <span class="ic">🚛</span>Giao hàng
-    </button>
-    <button id="navNhan" onclick="showTab('nhan')">
-      <span class="ic">📦</span>Nhận vật tư
-    </button>
-  </nav>
+  <button id="navNhan" class="active nhan-active" onclick="showTab('nhan')">
+    <span class="ic">📦</span>Nhận vật tư
+  </button>
+  <button id="navGiao" onclick="showTab('giao')">
+    <span class="ic">🚛</span>Giao hàng
+  </button>
+</nav>
 
   <div id="toast" class="toast"></div>
 
@@ -296,7 +313,7 @@
         });
     }
 
-    let currentTab = 'giao';
+    let currentTab = 'nhan';
     let scanners = { giao: null, nhan: null };
     let scannerRunning = { giao: false, nhan: false };
     let pending = { giao: [], nhan: [] }; // danh sách chờ lưu của từng tab
@@ -323,7 +340,7 @@
 
       loadHistory('giao');
       loadHistory('nhan');
-      showTab('giao');
+      showTab('nhan');
 
       startPolling();
     });
@@ -403,45 +420,169 @@
       }
     }
 
-    function toggleScanner(tab) {
-      if (scannerRunning[tab]) { stopScanner(tab); return; }
-      startScanner(tab);
-    }
+    // ================= BỘ QUÉT QR MỚI (tự nhận diện + khung bám theo mã) =================
+const scanState = { giao: null, nhan: null };
 
-    function startScanner(tab) {
-      const elId = 'qr-reader-' + tab;
-      const btn = document.getElementById(tab + '-scan-btn');
-      scanners[tab] = new Html5Qrcode(elId);
-      Html5Qrcode.getCameras().then(function (devices) {
-        if (!devices || !devices.length) { showToast('Không tìm thấy camera trên thiết bị.', true); return; }
-        const camId = devices.find(d => /back|rear|environment/i.test(d.label))?.id || devices[devices.length - 1].id;
-        scanners[tab].start(
-          camId,
-          { fps: 10, qrbox: { width: 240, height: 240 } },
-          function (decodedText) { onScanSuccess(tab, decodedText); },
-          function () {}
-        ).then(function () {
-          scannerRunning[tab] = true;
-          btn.innerText = '⏹ Dừng quét';
-        }).catch(function (err) {
-          showToast('Không mở được camera: ' + err, true);
-        });
-      }).catch(function (err) {
-        showToast('Cần cấp quyền camera để quét QR.', true);
-      });
-    }
+function toggleScanner(tab) {
+  if (scannerRunning[tab]) { stopScanner(tab); return; }
+  startScanner(tab);
+}
 
-    function stopScanner(tab) {
-      if (scanners[tab]) {
-        scanners[tab].stop().then(function () {
-          scanners[tab].clear();
-          scannerRunning[tab] = false;
-          document.getElementById(tab + '-scan-btn').innerText = '📷 Bắt đầu quét QR';
-        }).catch(function () {
-          scannerRunning[tab] = false;
-        });
+async function startScanner(tab) {
+  if (typeof jsQR === 'undefined') { showToast('Chưa tải được thư viện quét, kiểm tra mạng rồi tải lại trang.', true); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showToast('Trình duyệt không hỗ trợ camera. Hãy mở bằng Safari/Chrome qua https.', true); return;
+  }
+
+  const stage = document.getElementById('scan-stage-' + tab);
+  const video = document.getElementById('video-' + tab);
+  const overlay = document.getElementById('overlay-' + tab);
+  const btn = document.getElementById(tab + '-scan-btn');
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+    });
+
+    // Bật tự động lấy nét liên tục nếu thiết bị hỗ trợ (Android)
+    try {
+      const track = stream.getVideoTracks()[0];
+      const caps = track.getCapabilities ? track.getCapabilities() : {};
+      if (caps.focusMode && caps.focusMode.indexOf('continuous') > -1) {
+        await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
       }
+    } catch (e) {}
+
+    video.setAttribute('playsinline', 'true');
+    video.muted = true;
+    video.srcObject = stream;
+    stage.classList.remove('hidden');
+    await video.play();
+
+    let detector = null;
+    try {
+      if ('BarcodeDetector' in window) detector = new BarcodeDetector({ formats: ['qr_code'] });
+    } catch (e) { detector = null; }
+
+    const st = {
+      stream: stream, video: video, overlay: overlay, stage: stage, detector: detector,
+      work: document.createElement('canvas'),
+      active: true, locked: false, busy: false, last: 0, raf: 0
+    };
+    scanState[tab] = st;
+    scannerRunning[tab] = true;
+    btn.innerText = '⏹ Dừng quét';
+
+    function tick(ts) {
+      if (!st.active) return;
+      st.raf = requestAnimationFrame(tick);
+      if (st.locked || st.busy || video.readyState < 2 || ts - st.last < 80) return;
+      st.last = ts;
+      st.busy = true;
+      detectFrame(st).then(function (res) {
+        st.busy = false;
+        if (!st.active || st.locked) return;
+        if (res) {
+          st.locked = true;
+          drawBox(st, res.points);                 // khung xanh bám vào QR
+          if (navigator.vibrate) navigator.vibrate(60);
+          setTimeout(function () { if (st.active) onScanSuccess(tab, res.text); }, 350);
+        } else {
+          clearOverlay(st);
+        }
+      }).catch(function () { st.busy = false; });
     }
+    st.raf = requestAnimationFrame(tick);
+
+  } catch (err) {
+    stage.classList.add('hidden');
+    const name = err && err.name;
+    if (name === 'NotAllowedError') showToast('Cần cho phép camera: Cài đặt > Safari > Camera > Cho phép.', true);
+    else if (name === 'NotFoundError') showToast('Không tìm thấy camera trên thiết bị.', true);
+    else showToast('Không mở được camera: ' + (err && err.message ? err.message : err), true);
+  }
+}
+
+async function detectFrame(st) {
+  const v = st.video;
+  const w = v.videoWidth, h = v.videoHeight;
+  if (!w || !h) return null;
+
+  // Ưu tiên bộ đọc gốc của trình duyệt (nhanh, đọc được QR dày)
+  if (st.detector) {
+    try {
+      const codes = await st.detector.detect(v);
+      if (codes && codes.length && codes[0].rawValue) {
+        return {
+          text: codes[0].rawValue,
+          points: codes[0].cornerPoints.map(function (p) { return [p.x, p.y]; })
+        };
+      }
+      return null;
+    } catch (e) { st.detector = null; } // lỗi thì chuyển sang jsQR
+  }
+
+  // Dự phòng: jsQR (dùng cho iPhone/Safari)
+  const scale = Math.min(1, 1280 / w);
+  const cw = Math.round(w * scale), ch = Math.round(h * scale);
+  const cv = st.work;
+  cv.width = cw; cv.height = ch;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(v, 0, 0, cw, ch);
+  const img = ctx.getImageData(0, 0, cw, ch);
+  const code = jsQR(img.data, cw, ch, { inversionAttempts: 'dontInvert' });
+  if (!code) return null;
+  const l = code.location;
+  return {
+    text: code.data,
+    points: [l.topLeftCorner, l.topRightCorner, l.bottomRightCorner, l.bottomLeftCorner]
+      .map(function (p) { return [p.x / scale, p.y / scale]; })
+  };
+}
+
+function drawBox(st, pts) {
+  const c = st.overlay, v = st.video;
+  c.width = st.stage.clientWidth;
+  c.height = st.stage.clientHeight;
+  // quy đổi toạ độ video -> toạ độ hiển thị (object-fit: cover)
+  const s = Math.max(c.width / v.videoWidth, c.height / v.videoHeight);
+  const ox = (c.width - v.videoWidth * s) / 2;
+  const oy = (c.height - v.videoHeight * s) / 2;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.beginPath();
+  pts.forEach(function (p, i) {
+    const x = p[0] * s + ox, y = p[1] * s + oy;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(14,159,110,.25)';
+  ctx.strokeStyle = '#22c55e';
+  ctx.lineWidth = 4;
+  ctx.lineJoin = 'round';
+  ctx.fill();
+  ctx.stroke();
+}
+
+function clearOverlay(st) {
+  const c = st.overlay;
+  c.getContext('2d').clearRect(0, 0, c.width, c.height);
+}
+
+function stopScanner(tab) {
+  const st = scanState[tab];
+  if (!st) { scannerRunning[tab] = false; return; }
+  st.active = false;
+  cancelAnimationFrame(st.raf);
+  st.stream.getTracks().forEach(function (t) { t.stop(); });
+  st.video.srcObject = null;
+  clearOverlay(st);
+  st.stage.classList.add('hidden');
+  scanState[tab] = null;
+  scannerRunning[tab] = false;
+  document.getElementById(tab + '-scan-btn').innerText = '📷 Bắt đầu quét QR';
+}
 
     function onScanSuccess(tab, text) {
       // Định dạng QR: LSX|STT|MSCT|Tên chi tiết|SL/ĐH
@@ -465,8 +606,8 @@
       prev.classList.add('show');
 
       stopScanner(tab);
+      if (document.activeElement) document.activeElement.blur(); // đảm bảo không bật bàn phím
       showToast('Đã đọc mã QR. Kiểm tra số lượng rồi bấm "Thêm vào danh sách".');
-      document.getElementById(tab + '-sl').focus();
     }
 
     // ---- Thêm 1 món (từ QR hoặc nhập tay) vào danh sách chờ lưu ----
