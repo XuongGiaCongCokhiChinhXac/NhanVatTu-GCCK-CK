@@ -155,7 +155,7 @@
       <div class="card" id="giao-qr-card">
         <button class="scan-btn" style="background:var(--blue)" id="giao-scan-btn" onclick="toggleScanner('giao')">📷 Bắt đầu quét QR</button>
         <div class="scan-stage hidden" id="scan-stage-giao">
-  <video id="video-giao" playsinline muted autoplay></video>
+  <video id="video-giao" playsinline muted></video>
   <canvas id="overlay-giao"></canvas>
   <div class="scan-hint">Đưa mã QR vào camera, app tự nhận diện</div>
 </div>
@@ -222,7 +222,7 @@
       <div class="card" id="nhan-qr-card">
         <button class="scan-btn" style="background:var(--green)" id="nhan-scan-btn" onclick="toggleScanner('nhan')">📷 Bắt đầu quét QR</button>
         <div class="scan-stage hidden" id="scan-stage-nhan">
-  <video id="video-nhan" playsinline muted autoplay></video>
+  <video id="video-nhan" playsinline muted></video>
   <canvas id="overlay-nhan"></canvas>
   <div class="scan-hint">Đưa mã QR vào camera, app tự nhận diện</div>
 </div>
@@ -428,6 +428,24 @@ function toggleScanner(tab) {
   startScanner(tab);
 }
 
+// Phát video có thử lại (iPhone đời cũ hay báo "operation was aborted" ở lần gọi đầu)
+function startVideo(video) {
+  return new Promise(function (resolve, reject) {
+    let tries = 0;
+    function attempt() {
+      tries++;
+      const p = video.play();
+      if (p && p.then) {
+        p.then(resolve).catch(function (e) {
+          if (tries < 5) setTimeout(attempt, 250); else reject(e);
+        });
+      } else resolve();
+    }
+    if (video.readyState >= 1) attempt();
+    else video.onloadedmetadata = attempt;
+  });
+}
+
 async function startScanner(tab) {
   if (typeof jsQR === 'undefined') { showToast('Chưa tải được thư viện quét, kiểm tra mạng rồi tải lại trang.', true); return; }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -439,8 +457,9 @@ async function startScanner(tab) {
   const overlay = document.getElementById('overlay-' + tab);
   const btn = document.getElementById(tab + '-scan-btn');
 
+  let stream = null;
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
+    stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
     });
@@ -455,10 +474,11 @@ async function startScanner(tab) {
     } catch (e) {}
 
     video.setAttribute('playsinline', 'true');
+    video.setAttribute('webkit-playsinline', 'true');
     video.muted = true;
-    video.srcObject = stream;
     stage.classList.remove('hidden');
-    await video.play();
+    video.srcObject = stream;
+    await startVideo(video);
 
     let detector = null;
     try {
@@ -496,6 +516,7 @@ async function startScanner(tab) {
     st.raf = requestAnimationFrame(tick);
 
   } catch (err) {
+    if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
     stage.classList.add('hidden');
     const name = err && err.name;
     if (name === 'NotAllowedError') showToast('Cần cho phép camera: Cài đặt > Safari > Camera > Cho phép.', true);
