@@ -4,144 +4,178 @@
   <base target="_top">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
   <style>
-    :root{
-      --blue:#1a56db;
-      --blue-dark:#173e8a;
-      --green:#0e9f6e;
-      --green-dark:#0a7a54;
-      --bg:#f2f4f7;
-      --card:#ffffff;
-      --text:#1f2937;
-      --muted:#6b7280;
-      --border:#e5e7eb;
-      --danger:#dc2626;
-    }
-    *{box-sizing:border-box;}
-    html,body{margin:0;padding:0;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:var(--text);}
-    body{padding-bottom:76px;}
+  :root{
+    --accent:#059669; --accent-dark:#047857; --accent-soft:#d1fae5;
+    --bg:#f1f5f9; --card:#ffffff; --text:#0f172a; --muted:#64748b;
+    --border:#e2e8f0; --danger:#dc2626; --ink:#0f172a;
+  }
+  body.theme-nhan{ --accent:#059669; --accent-dark:#047857; --accent-soft:#d1fae5; }
+  body.theme-giao{ --accent:#2563eb; --accent-dark:#1d4ed8; --accent-soft:#dbeafe; }
 
-    header{
-      position:sticky; top:0; z-index:20;
-      background:linear-gradient(135deg,var(--blue),var(--blue-dark));
-      color:#fff; padding:16px 16px 14px;
-      text-align:center;
-    }
-    header h1{margin:0;font-size:18px;font-weight:700;letter-spacing:.3px;}
-    header .sub{font-size:12px;opacity:.85;margin-top:2px;}
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:var(--text);}
+  body{padding-bottom:96px;}
 
-    .container{padding:14px;max-width:520px;margin:0 auto;}
+  /* ===== Header ===== */
+  header{
+    position:sticky; top:0; z-index:20; text-align:center; color:#fff;
+    padding:14px 16px 16px;
+    background:linear-gradient(135deg,var(--accent),var(--accent-dark));
+    border-radius:0 0 22px 22px;
+    box-shadow:0 8px 20px -10px var(--accent-dark);
+    transition:background .25s;
+  }
+  header h1{margin:0;font-size:19px;font-weight:800;letter-spacing:.5px;display:flex;align-items:center;justify-content:center;gap:10px;}
+  header .sub{font-size:12px;opacity:.85;margin-top:3px;}
 
-    .mode-switch{
-      display:flex; background:#e9edf3; border-radius:12px; padding:4px; margin-bottom:14px;
-    }
-    .mode-switch button{
-      flex:1; border:none; background:transparent; padding:10px 6px; border-radius:9px;
-      font-size:14px; font-weight:600; color:var(--muted); cursor:pointer;
-    }
-    .mode-switch button.active{
-      background:var(--card); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.15);
-    }
+  .container{padding:16px 14px;max-width:520px;margin:0 auto;}
 
-    .card{
-      background:var(--card); border-radius:14px; padding:16px;
-      box-shadow:0 1px 4px rgba(0,0,0,.06); margin-bottom:14px; border:1px solid var(--border);
-    }
+  /* ===== Chuyển chế độ Quét QR / Nhập tay ===== */
+  .mode-switch{display:flex;background:#e2e8f0;border-radius:14px;padding:4px;margin-bottom:14px;}
+  .mode-switch button{
+    flex:1; border:none; background:transparent; padding:12px 6px; border-radius:11px;
+    font-size:14.5px; font-weight:700; color:var(--muted); cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:8px; transition:.2s;
+  }
+  .mode-switch button.active{background:#fff;color:var(--accent-dark);box-shadow:0 2px 6px rgba(15,23,42,.12);}
 
-    .scan-btn{
-      width:100%; padding:14px; border:none; border-radius:12px;
-      font-size:15px; font-weight:700; color:#fff; cursor:pointer; margin-bottom:6px;
-    }
-    .scan-stage{
-  position:relative; width:100%; aspect-ratio:3/4; margin-top:10px;
-  border-radius:14px; overflow:hidden; background:#000;
-}
-.scan-stage video{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
-.scan-stage canvas{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
-.scan-hint{
-  position:absolute; left:50%; bottom:12px; transform:translateX(-50%);
-  background:rgba(0,0,0,.55); color:#fff; font-size:12.5px; font-weight:600;
-  padding:6px 12px; border-radius:20px; white-space:nowrap; pointer-events:none;
-}
+  /* ===== Card ===== */
+  .card{
+    background:var(--card); border-radius:18px; padding:16px; margin-bottom:14px;
+    box-shadow:0 2px 10px rgba(15,23,42,.06); border:1px solid var(--border);
+  }
+  .section-title{
+    display:flex; align-items:center; gap:8px;
+    font-size:13px; font-weight:800; color:var(--muted); margin:0 0 12px;
+    text-transform:uppercase; letter-spacing:.5px;
+  }
+  .section-title i{color:var(--accent);font-size:15px;}
+  .section-title .badge{
+    margin-left:auto; background:var(--accent-soft); color:var(--accent-dark);
+    min-width:26px; text-align:center; padding:2px 9px; border-radius:20px; font-size:13px;
+  }
 
-    .field{margin-bottom:12px;}
-    .field label{display:block; font-size:12.5px; font-weight:600; color:var(--muted); margin-bottom:5px; text-transform:uppercase; letter-spacing:.3px;}
-    .field input, .field select{
-      width:100%; padding:12px 12px; font-size:16px; border-radius:10px;
-      border:1.5px solid var(--border); background:#fafbfc; color:var(--text);
-    }
-    .field input:focus, .field select:focus{ outline:none; border-color:var(--blue); background:#fff; }
-    .field input[readonly]{ background:#f0f2f5; color:var(--muted); }
-    .row2{ display:flex; gap:10px; }
-    .row2 .field{ flex:1; }
+  /* ===== Nút bấm ===== */
+  .btn{
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    width:100%; min-height:54px; border:none; border-radius:14px;
+    font-size:16px; font-weight:700; cursor:pointer; text-align:center;
+    transition:transform .08s, filter .15s;
+  }
+  .btn:active{transform:scale(.97);filter:brightness(.95);}
+  .btn:disabled{opacity:.6;}
+  .btn i{font-size:18px;}
+  .btn-lg{min-height:64px;font-size:17.5px;}
+  .btn-lg i{font-size:22px;}
+  .btn-primary{background:var(--accent);color:#fff;box-shadow:0 8px 16px -8px var(--accent);}
+  .btn-soft{background:var(--accent-soft);color:var(--accent-dark);}
+  .btn-ghost{background:#fff;color:var(--muted);border:1.5px solid var(--border);}
+  .btn-dark{background:var(--ink);color:#fff;box-shadow:0 8px 16px -8px rgba(15,23,42,.6);}
+  .btn-row{display:flex;gap:10px;margin-top:4px;}
+  .btn-row .btn-ghost{flex:0 0 32%;}
+  .btn-row .btn-primary{flex:1;}
+  .gap-top{margin-top:10px;}
 
-    .qr-preview{
-      background:#eef2ff; border:1px dashed #93a5e8; border-radius:10px;
-      padding:10px 12px; font-size:12.5px; color:var(--blue-dark); margin-bottom:12px; display:none;
-    }
-    .qr-preview.show{ display:block; }
+  /* ===== Khung camera ===== */
+  .scan-stage{
+    position:relative; width:100%; aspect-ratio:3/4; margin-top:12px;
+    border-radius:16px; overflow:hidden; background:#000;
+  }
+  .scan-stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+  .scan-stage canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
+  .scan-hint{
+    position:absolute; left:50%; bottom:12px; transform:translateX(-50%);
+    background:rgba(0,0,0,.6); color:#fff; font-size:12.5px; font-weight:600;
+    padding:7px 14px; border-radius:20px; white-space:nowrap; pointer-events:none;
+  }
 
-    .submit-btn{
-      width:100%; padding:15px; border:none; border-radius:12px;
-      font-size:16px; font-weight:700; color:#fff; cursor:pointer;
-    }
-    .submit-btn:disabled{ opacity:.6; }
+  /* ===== Ô nhập liệu ===== */
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px;}
+  .field input, .field select{
+    width:100%; padding:13px 14px; font-size:16px; border-radius:12px;
+    border:1.5px solid var(--border); background:#f8fafc; color:var(--text);
+    -webkit-appearance:none; appearance:none;
+  }
+  .field input:focus, .field select:focus{outline:none;border-color:var(--accent);background:#fff;box-shadow:0 0 0 4px var(--accent-soft);}
+  .field input[readonly]{background:#f1f5f9;color:var(--muted);}
+  #giao-sl, #nhan-sl{font-size:24px;font-weight:800;text-align:center;padding:14px;}
+  .row2{display:flex;gap:10px;}
+  .row2 .field{flex:1;min-width:0;}
 
-    .clear-btn{
-      width:100%; padding:11px; margin-top:8px; border-radius:12px; border:1.5px solid var(--border);
-      background:transparent; color:var(--muted); font-weight:600; font-size:14px; cursor:pointer;
-    }
+  .qr-preview{
+    background:var(--accent-soft); border:1px dashed var(--accent); border-radius:12px;
+    padding:10px 12px; font-size:12.5px; color:var(--accent-dark); margin-bottom:12px; display:none;
+  }
+  .qr-preview.show{display:block;}
 
-    .toast{
-      position:fixed; left:50%; bottom:90px; transform:translate(-50%,20px);
-      background:var(--text); color:#fff; padding:12px 18px; border-radius:12px;
-      font-size:14px; font-weight:600; opacity:0; transition:.25s; z-index:100; max-width:88%; text-align:center;
-      box-shadow:0 4px 14px rgba(0,0,0,.25);
-    }
-    .toast.show{ opacity:1; transform:translate(-50%,0); }
-    .toast.error{ background:var(--danger); }
+  /* ===== Bảng ===== */
+  .table-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--border);}
+  .data-table{width:100%;border-collapse:collapse;font-size:13px;}
+  .data-table th{
+    background:#f1f5f9; color:var(--muted); font-weight:800; text-align:left;
+    padding:10px 8px; white-space:nowrap; font-size:11.5px; text-transform:uppercase; letter-spacing:.3px;
+  }
+  .data-table td{padding:10px 8px;border-top:1px solid var(--border);white-space:nowrap;}
+  .data-table td:nth-child(2){max-width:120px;overflow:hidden;text-overflow:ellipsis;}
+  .data-table tbody tr:nth-child(even){background:#f8fafc;}
+  .data-table .empty-row td{color:var(--muted);text-align:center;white-space:normal;padding:18px 8px;}
+  .data-table .rm-btn{
+    width:34px;height:34px;border:none;border-radius:10px;background:#fee2e2;color:var(--danger);
+    font-size:14px;cursor:pointer;
+  }
+  .data-table .rm-btn:active{transform:scale(.92);}
+  .qty-input{
+    width:74px;padding:8px;font-size:16px;font-weight:800;text-align:center;
+    border:1.5px solid var(--border);border-radius:10px;background:#fff;color:var(--text);
+  }
+  .qty-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);}
 
-    .table-wrap{ overflow-x:auto; border-radius:10px; border:1px solid var(--border); }
-    .data-table{ width:100%; border-collapse:collapse; font-size:12.5px; }
-    .data-table th{
-      background:var(--blue); color:#fff; font-weight:700; text-align:left;
-      padding:9px 8px; white-space:nowrap;
-    }
-    .data-table td{ padding:8px; border-top:1px solid var(--border); white-space:nowrap; }
-    .data-table td:nth-child(2){ max-width:120px; overflow:hidden; text-overflow:ellipsis; }
-    .data-table tbody tr:nth-child(even){ background:#f8fafc; }
-    .data-table .empty-row td{ color:var(--muted); text-align:center; white-space:normal; }
-    .data-table .rm-btn{ border:none; background:transparent; color:var(--danger); font-weight:700; font-size:15px; cursor:pointer; padding:0 4px; }
+  /* ===== Thanh tab dưới đáy ===== */
+  nav.tabs{
+    position:fixed; bottom:0; left:0; right:0; display:flex; z-index:30;
+    background:rgba(255,255,255,.96); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    border-top:1px solid var(--border); box-shadow:0 -4px 16px rgba(15,23,42,.08);
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  nav.tabs button{
+    flex:1; border:none; background:transparent; padding:10px 4px 9px; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; gap:4px;
+    color:#94a3b8; font-size:12.5px; font-weight:700; position:relative; transition:color .2s;
+  }
+  nav.tabs button i{font-size:22px;}
+  nav.tabs button.active{color:var(--accent);}
+  nav.tabs button.active::before{
+    content:''; position:absolute; top:0; left:30%; right:30%; height:3px;
+    background:var(--accent); border-radius:0 0 4px 4px;
+  }
 
-    nav.tabs{
-      position:fixed; bottom:0; left:0; right:0; display:flex;
-      background:#fff; border-top:1px solid var(--border); z-index:30;
-      box-shadow:0 -2px 8px rgba(0,0,0,.06);
-    }
-    nav.tabs button{
-      flex:1; border:none; background:transparent; padding:11px 4px 9px; cursor:pointer;
-      display:flex; flex-direction:column; align-items:center; gap:3px;
-      color:var(--muted); font-size:12px; font-weight:600;
-    }
-    nav.tabs button .ic{ font-size:20px; }
-    nav.tabs button.active{ color:var(--blue); }
-    nav.tabs button.active.nhan-active{ color:var(--green-dark); }
-    nav.tabs button.active.tonghop-active{ color:#7c3aed; }
+  /* ===== Thông báo ===== */
+  .toast{
+    position:fixed; left:50%; bottom:104px; transform:translate(-50%,20px);
+    background:var(--ink); color:#fff; padding:13px 18px; border-radius:14px;
+    font-size:14px; font-weight:600; opacity:0; transition:.25s; z-index:100;
+    max-width:90%; text-align:left; box-shadow:0 8px 24px rgba(0,0,0,.3);
+    display:flex; align-items:center; gap:10px; pointer-events:none;
+  }
+  .toast i{font-size:18px;color:#4ade80;}
+  .toast.error{background:var(--danger);}
+  .toast.error i{color:#fff;}
+  .toast.show{opacity:1;transform:translate(-50%,0);}
 
-    .status-ok{ color:var(--green-dark); font-weight:700; }
-    .status-thieu{ color:var(--danger); font-weight:700; }
-
-    .hidden{ display:none !important; }
-    .section-title{ font-size:13px; font-weight:700; color:var(--muted); margin:0 0 10px; text-transform:uppercase; letter-spacing:.4px;}
-    .photo-btn{ display:block; text-align:center; background:#475569; margin-top:8px; }
-  </style>
+  .status-ok{color:var(--accent-dark);font-weight:700;}
+  .status-thieu{color:var(--danger);font-weight:700;}
+  .hidden{display:none !important;}
+</style>
 </head>
 <body>
 
-  <header>
-    <h1 id="pageTitle">📦 NHẬN VẬT TƯ</h1>
+    <header>
+    <h1 id="pageTitle"><i class="fa-solid fa-box-open"></i> NHẬN VẬT TƯ</h1>
     <div class="sub">Quản lý vật tư sản xuất</div>
   </header>
 
@@ -150,22 +184,23 @@
     <!-- ===== TAB GIAO HÀNG ===== -->
     <div id="tab-giao" class="hidden">
       <div class="mode-switch">
-        <button id="giao-mode-qr" class="active" onclick="setMode('giao','qr')">📷 Quét QR</button>
-        <button id="giao-mode-manual" onclick="setMode('giao','manual')">⌨️ Nhập tay</button>
+        <button id="giao-mode-qr" class="active" onclick="setMode('giao','qr')"><i class="fa-solid fa-qrcode"></i> Quét QR</button>
+        <button id="giao-mode-manual" onclick="setMode('giao','manual')"><i class="fa-solid fa-keyboard"></i> Nhập tay</button>
       </div>
 
       <div class="card" id="giao-qr-card">
-        <button class="scan-btn" style="background:var(--blue)" id="giao-scan-btn" onclick="toggleScanner('giao')">📷 Bắt đầu quét QR</button>
-<label class="scan-btn photo-btn" for="photo-giao">🖼️ Đọc từ nhiều ảnh QR</label>
-<input type="file" id="photo-giao" class="hidden" accept="image/*" multiple onchange="handlePhotos('giao', this)">
+        <button class="btn btn-primary btn-lg" id="giao-scan-btn" onclick="toggleScanner('giao')"><i class="fa-solid fa-qrcode"></i> Bắt đầu quét QR</button>
+        <label class="btn btn-soft gap-top" for="photo-giao"><i class="fa-solid fa-images"></i> Đọc từ nhiều ảnh QR</label>
+        <input type="file" id="photo-giao" class="hidden" accept="image/*" multiple onchange="handlePhotos('giao', this)">
         <div class="scan-stage hidden" id="scan-stage-giao">
-  <video id="video-giao" playsinline muted></video>
-  <canvas id="overlay-giao"></canvas>
-  <div class="scan-hint">Đưa mã QR vào camera, app tự nhận diện</div>
-</div>
+          <video id="video-giao" playsinline muted></video>
+          <canvas id="overlay-giao"></canvas>
+          <div class="scan-hint">Đưa mã QR vào camera, app tự nhận diện</div>
+        </div>
       </div>
 
       <div class="card">
+        <div class="section-title"><i class="fa-solid fa-pen-to-square"></i> Thông tin giao hàng</div>
         <div id="giao-qr-preview" class="qr-preview"></div>
 
         <div id="giao-auto-fields" class="hidden">
@@ -181,15 +216,17 @@
 
         <div class="field">
           <label>Số lượng giao</label>
-          <input id="giao-sl" type="number" inputmode="decimal" placeholder="Nhập số lượng giao">
+          <input id="giao-sl" type="number" inputmode="decimal" placeholder="0">
         </div>
 
-        <button class="submit-btn" style="background:var(--blue)" onclick="addToList('giao')">➕ Thêm vào danh sách</button>
-        <button class="clear-btn" onclick="resetForm('giao')">Xóa / Nhập lại</button>
+        <div class="btn-row">
+          <button class="btn btn-ghost" onclick="resetForm('giao')"><i class="fa-solid fa-eraser"></i> Xóa</button>
+          <button class="btn btn-primary" onclick="addToList('giao')"><i class="fa-solid fa-circle-plus"></i> Thêm vào danh sách</button>
+        </div>
       </div>
 
       <div class="card">
-        <div class="section-title">Danh sách chờ lưu (<span id="giao-pending-count">0</span>)</div>
+        <div class="section-title"><i class="fa-solid fa-clipboard-list"></i> Danh sách chờ lưu <span class="badge" id="giao-pending-count">0</span></div>
         <div class="table-wrap">
           <table class="data-table" id="giao-pending-table">
             <thead><tr><th>LSX-STT</th><th>Chi tiết</th><th>SL/ĐH</th><th>Giao</th><th></th></tr></thead>
@@ -197,16 +234,16 @@
           </table>
         </div>
 
-        <div class="field" style="margin-top:12px;">
+        <div class="field" style="margin-top:14px;">
           <label>Người giao</label>
           <input id="giao-nguoi" list="userlist" placeholder="Tên người giao hàng">
         </div>
 
-        <button class="submit-btn" style="background:var(--blue)" onclick="saveAll('giao')">💾 Lưu tất cả (<span id="giao-save-count">0</span>)</button>
+        <button class="btn btn-dark btn-lg" onclick="saveAll('giao')"><i class="fa-solid fa-floppy-disk"></i> Lưu tất cả (<span id="giao-save-count">0</span>)</button>
       </div>
 
       <div class="card">
-        <div class="section-title">Vừa ghi nhận (Giao hàng)</div>
+        <div class="section-title"><i class="fa-solid fa-clock-rotate-left"></i> Vừa ghi nhận (Giao hàng)</div>
         <div class="table-wrap">
           <table class="data-table">
             <thead><tr><th>LSX-STT</th><th>Chi tiết</th><th>SL/ĐH</th><th>Giao</th><th>Ngày</th><th>Người</th></tr></thead>
@@ -219,22 +256,23 @@
     <!-- ===== TAB NHẬN VẬT TƯ ===== -->
     <div id="tab-nhan" class="hidden">
       <div class="mode-switch">
-        <button id="nhan-mode-qr" class="active" onclick="setMode('nhan','qr')">📷 Quét QR</button>
-        <button id="nhan-mode-manual" onclick="setMode('nhan','manual')">⌨️ Nhập tay</button>
+        <button id="nhan-mode-qr" class="active" onclick="setMode('nhan','qr')"><i class="fa-solid fa-qrcode"></i> Quét QR</button>
+        <button id="nhan-mode-manual" onclick="setMode('nhan','manual')"><i class="fa-solid fa-keyboard"></i> Nhập tay</button>
       </div>
 
       <div class="card" id="nhan-qr-card">
-        <button class="scan-btn" style="background:var(--green)" id="nhan-scan-btn" onclick="toggleScanner('nhan')">📷 Bắt đầu quét QR</button>
-<label class="scan-btn photo-btn" for="photo-nhan">🖼️ Đọc từ nhiều ảnh QR</label>
-<input type="file" id="photo-nhan" class="hidden" accept="image/*" multiple onchange="handlePhotos('nhan', this)">
+        <button class="btn btn-primary btn-lg" id="nhan-scan-btn" onclick="toggleScanner('nhan')"><i class="fa-solid fa-qrcode"></i> Bắt đầu quét QR</button>
+        <label class="btn btn-soft gap-top" for="photo-nhan"><i class="fa-solid fa-images"></i> Đọc từ nhiều ảnh QR</label>
+        <input type="file" id="photo-nhan" class="hidden" accept="image/*" multiple onchange="handlePhotos('nhan', this)">
         <div class="scan-stage hidden" id="scan-stage-nhan">
-  <video id="video-nhan" playsinline muted></video>
-  <canvas id="overlay-nhan"></canvas>
-  <div class="scan-hint">Đưa mã QR vào camera, app tự nhận diện</div>
-</div>
+          <video id="video-nhan" playsinline muted></video>
+          <canvas id="overlay-nhan"></canvas>
+          <div class="scan-hint">Đưa mã QR vào camera, app tự nhận diện</div>
+        </div>
       </div>
 
       <div class="card">
+        <div class="section-title"><i class="fa-solid fa-pen-to-square"></i> Thông tin nhận vật tư</div>
         <div id="nhan-qr-preview" class="qr-preview"></div>
 
         <div id="nhan-auto-fields" class="hidden">
@@ -250,15 +288,17 @@
 
         <div class="field">
           <label>Số lượng nhận</label>
-          <input id="nhan-sl" type="number" inputmode="decimal" placeholder="Nhập số lượng nhận">
+          <input id="nhan-sl" type="number" inputmode="decimal" placeholder="0">
         </div>
 
-        <button class="submit-btn" style="background:var(--green)" onclick="addToList('nhan')">➕ Thêm vào danh sách</button>
-        <button class="clear-btn" onclick="resetForm('nhan')">Xóa / Nhập lại</button>
+        <div class="btn-row">
+          <button class="btn btn-ghost" onclick="resetForm('nhan')"><i class="fa-solid fa-eraser"></i> Xóa</button>
+          <button class="btn btn-primary" onclick="addToList('nhan')"><i class="fa-solid fa-circle-plus"></i> Thêm vào danh sách</button>
+        </div>
       </div>
 
       <div class="card">
-        <div class="section-title">Danh sách chờ lưu (<span id="nhan-pending-count">0</span>)</div>
+        <div class="section-title"><i class="fa-solid fa-clipboard-list"></i> Danh sách chờ lưu <span class="badge" id="nhan-pending-count">0</span></div>
         <div class="table-wrap">
           <table class="data-table" id="nhan-pending-table">
             <thead><tr><th>LSX-STT</th><th>Chi tiết</th><th>SL/ĐH</th><th>Nhận</th><th></th></tr></thead>
@@ -266,16 +306,16 @@
           </table>
         </div>
 
-        <div class="field" style="margin-top:12px;">
+        <div class="field" style="margin-top:14px;">
           <label>Người nhận</label>
           <input id="nhan-nguoi" list="userlist" placeholder="Tên người nhận vật tư">
         </div>
 
-        <button class="submit-btn" style="background:var(--green)" onclick="saveAll('nhan')">💾 Lưu tất cả (<span id="nhan-save-count">0</span>)</button>
+        <button class="btn btn-dark btn-lg" onclick="saveAll('nhan')"><i class="fa-solid fa-floppy-disk"></i> Lưu tất cả (<span id="nhan-save-count">0</span>)</button>
       </div>
 
       <div class="card">
-        <div class="section-title">Vừa ghi nhận (Nhận vật tư)</div>
+        <div class="section-title"><i class="fa-solid fa-clock-rotate-left"></i> Vừa ghi nhận (Nhận vật tư)</div>
         <div class="table-wrap">
           <table class="data-table">
             <thead><tr><th>LSX-STT</th><th>Chi tiết</th><th>SL/ĐH</th><th>Nhận</th><th>Ngày</th><th>Người</th></tr></thead>
@@ -290,13 +330,13 @@
   <datalist id="userlist"></datalist>
 
   <nav class="tabs">
-  <button id="navNhan" class="active nhan-active" onclick="showTab('nhan')">
-    <span class="ic">📦</span>Nhận vật tư
-  </button>
-  <button id="navGiao" onclick="showTab('giao')">
-    <span class="ic">🚛</span>Giao hàng
-  </button>
-</nav>
+    <button id="navNhan" class="active" onclick="showTab('nhan')">
+      <i class="fa-solid fa-box-open"></i><span>Nhận vật tư</span>
+    </button>
+    <button id="navGiao" onclick="showTab('giao')">
+      <i class="fa-solid fa-truck-fast"></i><span>Giao hàng</span>
+    </button>
+  </nav>
 
   <div id="toast" class="toast"></div>
 
@@ -397,17 +437,18 @@
       }, 8000); // 8 giây/lần — đủ nhanh để cảm giác "realtime", không tốn quota
     }
 
-    function showTab(tab) {
+        function showTab(tab) {
       currentTab = tab;
+      document.body.className = 'theme-' + tab; // đổi màu giao diện theo tab
       document.getElementById('tab-giao').classList.toggle('hidden', tab !== 'giao');
       document.getElementById('tab-nhan').classList.toggle('hidden', tab !== 'nhan');
 
       document.getElementById('navGiao').classList.toggle('active', tab === 'giao');
       document.getElementById('navNhan').classList.toggle('active', tab === 'nhan');
-      document.getElementById('navNhan').classList.toggle('nhan-active', tab === 'nhan');
 
-      document.getElementById('pageTitle').innerText =
-        tab === 'giao' ? '🚛 GIAO HÀNG' : '📦 NHẬN VẬT TƯ';
+      document.getElementById('pageTitle').innerHTML = (tab === 'giao')
+        ? '<i class="fa-solid fa-truck-fast"></i> GIAO HÀNG'
+        : '<i class="fa-solid fa-box-open"></i> NHẬN VẬT TƯ';
 
       // dừng scanner của tab không dùng tới
       ['giao', 'nhan'].forEach(function (t) {
@@ -498,7 +539,7 @@ async function startScanner(tab) {
     };
     scanState[tab] = st;
     scannerRunning[tab] = true;
-    btn.innerText = '⏹ Dừng quét';
+    btn.innerHTML = '<i class="fa-solid fa-stop"></i> Dừng quét';
 
     function tick(ts) {
       if (!st.active) return;
@@ -677,7 +718,7 @@ function stopScanner(tab) {
   st.stage.classList.add('hidden');
   scanState[tab] = null;
   scannerRunning[tab] = false;
-  document.getElementById(tab + '-scan-btn').innerText = '📷 Bắt đầu quét QR';
+  document.getElementById(tab + '-scan-btn').innerHTML = '<i class="fa-solid fa-qrcode"></i> Bắt đầu quét QR';
 }
 
     function onScanSuccess(tab, text) {
@@ -744,7 +785,7 @@ function stopScanner(tab) {
       renderPending(tab);
     }
 
-    function renderPending(tab) {
+        function renderPending(tab) {
       const tbody = document.querySelector('#' + tab + '-pending-table tbody');
       document.getElementById(tab + '-pending-count').innerText = pending[tab].length;
       document.getElementById(tab + '-save-count').innerText = pending[tab].length;
@@ -760,10 +801,9 @@ function stopScanner(tab) {
           '<td>' + it.lsx + '-' + it.stt + '</td>' +
           '<td>' + chiTiet + '</td>' +
           '<td>' + sldh + '</td>' +
-          '<td><input type="number" inputmode="decimal" value="' + it.sl + '" ' +
-            'style="width:72px;padding:6px;font-size:14px;font-weight:700;border:1.5px solid var(--border);border-radius:8px;" ' +
+          '<td><input class="qty-input" type="number" inputmode="decimal" value="' + it.sl + '" ' +
             'onchange="updatePendingQty(\'' + tab + '\',' + idx + ',this.value)"></td>' +
-          '<td><button class="rm-btn" onclick="removeFromList(\'' + tab + '\',' + idx + ')">✕</button></td>' +
+          '<td><button class="rm-btn" onclick="removeFromList(\'' + tab + '\',' + idx + ')"><i class="fa-solid fa-trash-can"></i></button></td>' +
           '</tr>';
       }).join('');
     }
@@ -979,7 +1019,7 @@ async function handlePhotos(tab, input) {
 
   renderPending(tab);
 
-  let msg = '✅ Đã thêm ' + added + ' mục vào danh sách';
+  let msg = 'Đã thêm ' + added + ' mục vào danh sách';
   if (dup) msg += ' · bỏ qua ' + dup + ' mã trùng';
   if (bad) msg += ' · ' + bad + ' mã sai định dạng';
   if (failed.length) msg += ' · không đọc được ảnh số ' + failed.join(', ');
@@ -987,9 +1027,10 @@ async function handlePhotos(tab, input) {
 }
 
     let toastTimer;
-    function showToast(msg, isError, ms) {
+        function showToast(msg, isError, ms) {
       const t = document.getElementById('toast');
-      t.innerText = msg;
+      t.innerHTML = '<i class="fa-solid ' + (isError ? 'fa-triangle-exclamation' : 'fa-circle-check') + '"></i><span></span>';
+      t.querySelector('span').textContent = msg;
       t.classList.toggle('error', !!isError);
       t.classList.add('show');
       clearTimeout(toastTimer);
