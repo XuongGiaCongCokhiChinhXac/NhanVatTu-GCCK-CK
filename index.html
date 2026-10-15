@@ -101,8 +101,13 @@
     border:1.5px solid var(--border); background:#f8fafc; color:var(--text);
     -webkit-appearance:none; appearance:none;
   }
-  .field input:focus, .field select:focus{outline:none;border-color:var(--accent);background:#fff;box-shadow:0 0 0 4px var(--accent-soft);}
+  .field input:focus, .field select:focus{outline:none;border-color:var(--accent);background-color:#fff;box-shadow:0 0 0 4px var(--accent-soft);}
   .field input[readonly]{background:#f1f5f9;color:var(--muted);}
+  .field select{
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 14px center;
+    padding-right:40px; font-weight:700; cursor:pointer;
+  }
   #giao-sl, #nhan-sl{font-size:24px;font-weight:800;text-align:center;padding:14px;}
   .row2{display:flex;gap:10px;}
   .row2 .field{flex:1;min-width:0;}
@@ -183,10 +188,6 @@
 
     <!-- ===== TAB GIAO HÀNG ===== -->
     <div id="tab-giao" class="hidden">
-      <div class="mode-switch">
-        <button id="giao-mode-qr" class="active" onclick="setMode('giao','qr')"><i class="fa-solid fa-qrcode"></i> Quét QR</button>
-        <button id="giao-mode-manual" onclick="setMode('giao','manual')"><i class="fa-solid fa-keyboard"></i> Nhập tay</button>
-      </div>
 
       <div class="card" id="giao-qr-card">
         <button class="btn btn-primary btn-lg" id="giao-scan-btn" onclick="toggleScanner('giao')"><i class="fa-solid fa-qrcode"></i> Bắt đầu quét QR</button>
@@ -236,7 +237,7 @@
 
         <div class="field" style="margin-top:14px;">
           <label>Người giao</label>
-          <input id="giao-nguoi" list="userlist" placeholder="Tên người giao hàng">
+          <select id="giao-nguoi" onchange="onPersonChange('giao')"><option value="">-- Chọn người giao --</option></select>
         </div>
 
         <button class="btn btn-dark btn-lg" onclick="saveAll('giao')"><i class="fa-solid fa-floppy-disk"></i> Lưu tất cả (<span id="giao-save-count">0</span>)</button>
@@ -255,10 +256,6 @@
 
     <!-- ===== TAB NHẬN VẬT TƯ ===== -->
     <div id="tab-nhan" class="hidden">
-      <div class="mode-switch">
-        <button id="nhan-mode-qr" class="active" onclick="setMode('nhan','qr')"><i class="fa-solid fa-qrcode"></i> Quét QR</button>
-        <button id="nhan-mode-manual" onclick="setMode('nhan','manual')"><i class="fa-solid fa-keyboard"></i> Nhập tay</button>
-      </div>
 
       <div class="card" id="nhan-qr-card">
         <button class="btn btn-primary btn-lg" id="nhan-scan-btn" onclick="toggleScanner('nhan')"><i class="fa-solid fa-qrcode"></i> Bắt đầu quét QR</button>
@@ -308,7 +305,7 @@
 
         <div class="field" style="margin-top:14px;">
           <label>Người nhận</label>
-          <input id="nhan-nguoi" list="userlist" placeholder="Tên người nhận vật tư">
+          <select id="nhan-nguoi" onchange="onPersonChange('nhan')"><option value="">-- Chọn người nhận --</option></select>
         </div>
 
         <button class="btn btn-dark btn-lg" onclick="saveAll('nhan')"><i class="fa-solid fa-floppy-disk"></i> Lưu tất cả (<span id="nhan-save-count">0</span>)</button>
@@ -326,8 +323,6 @@
     </div>
 
   </div>
-
-  <datalist id="userlist"></datalist>
 
   <nav class="tabs">
     <button id="navNhan" class="active" onclick="showTab('nhan')">
@@ -369,20 +364,18 @@
 
     // ---- Ghi nhớ tên người dùng gần nhất ----
     window.addEventListener('DOMContentLoaded', function () {
+      // Hiện sẵn tên đã chọn lần trước, rồi nạp danh sách đầy đủ từ sheet "Người dùng"
       const savedName = localStorage.getItem('vt_nguoi') || '';
-      document.getElementById('giao-nguoi').value = savedName;
-      document.getElementById('nhan-nguoi').value = savedName;
+      fillPersonSelects(savedName ? [savedName] : [], savedName);
 
       callApi('getUserList').then(function (list) {
-        const dl = document.getElementById('userlist');
-        (list || []).forEach(function (name) {
-          const opt = document.createElement('option');
-          opt.value = name;
-          dl.appendChild(opt);
-        });
+        fillPersonSelects(list || [], localStorage.getItem('vt_nguoi') || '');
       }).catch(function (err) {
         console.error('Không tải được danh sách người dùng:', err);
+        showToast('Không tải được danh sách tên từ Sheet. Kiểm tra mạng rồi tải lại trang.', true);
       });
+
+      setupQuickEntry();
 
       loadHistory('giao');
       loadHistory('nhan');
@@ -456,15 +449,49 @@
       });
     }
 
-    function setMode(tab, mode) {
-      document.getElementById(tab + '-mode-qr').classList.toggle('active', mode === 'qr');
-      document.getElementById(tab + '-mode-manual').classList.toggle('active', mode === 'manual');
-      document.getElementById(tab + '-qr-card').classList.toggle('hidden', mode !== 'qr');
-      if (mode === 'manual' && scannerRunning[tab]) stopScanner(tab);
-      if (mode === 'manual') {
-        document.getElementById(tab + '-auto-fields').classList.add('hidden');
-        document.getElementById(tab + '-qr-preview').classList.remove('show');
-      }
+    // ---- Danh sách người thực hiện (lấy từ sheet "Người dùng", cột Họ và tên) ----
+    function fillPersonSelects(names, selected) {
+      ['giao', 'nhan'].forEach(function (tab) {
+        const sel = document.getElementById(tab + '-nguoi');
+        sel.innerHTML = '';
+        const first = document.createElement('option');
+        first.value = '';
+        first.textContent = (tab === 'giao') ? '-- Chọn người giao --' : '-- Chọn người nhận --';
+        sel.appendChild(first);
+        names.forEach(function (name) {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name;
+          sel.appendChild(opt);
+        });
+        sel.value = (selected && names.indexOf(selected) > -1) ? selected : '';
+      });
+    }
+
+    // Chọn tên ở tab này thì tab kia tự chọn theo, và ghi nhớ cho lần sau
+    function onPersonChange(tab) {
+      const name = document.getElementById(tab + '-nguoi').value;
+      const other = (tab === 'giao') ? 'nhan' : 'giao';
+      document.getElementById(other + '-nguoi').value = name;
+      if (name) localStorage.setItem('vt_nguoi', name);
+    }
+
+    // Nhập nhanh: Enter chuyển ô LSX -> STT -> Số lượng -> Thêm vào danh sách
+    function setupQuickEntry() {
+      ['giao', 'nhan'].forEach(function (tab) {
+        const lsx = document.getElementById(tab + '-lsx');
+        const stt = document.getElementById(tab + '-stt');
+        const sl  = document.getElementById(tab + '-sl');
+        lsx.setAttribute('autocomplete', 'off');
+        lsx.setAttribute('autocapitalize', 'characters');
+        lsx.setAttribute('enterkeyhint', 'next');
+        stt.setAttribute('autocomplete', 'off');
+        stt.setAttribute('enterkeyhint', 'next');
+        sl.setAttribute('enterkeyhint', 'done');
+        lsx.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); stt.focus(); } });
+        stt.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); sl.focus(); } });
+        sl.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); sl.blur(); addToList(tab); } });
+      });
     }
 
     // ================= BỘ QUÉT QR MỚI (tự nhận diện + khung bám theo mã) =================
@@ -812,7 +839,7 @@ function stopScanner(tab) {
     function saveAll(tab) {
       const nguoi = document.getElementById(tab + '-nguoi').value.trim();
       if (!pending[tab].length) { showToast('Danh sách đang trống.', true); return; }
-      if (!nguoi) { showToast('Vui lòng nhập tên người thực hiện.', true); return; }
+      if (!nguoi) { showToast('Vui lòng chọn người thực hiện.', true); return; }
 
       localStorage.setItem('vt_nguoi', nguoi);
 
