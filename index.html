@@ -357,7 +357,30 @@
     let currentTab = 'nhan';
     let scanners = { giao: null, nhan: null };
     let scannerRunning = { giao: false, nhan: false };
-    let pending = { giao: [], nhan: [] }; // danh sách chờ lưu của từng tab
+    // ====== Lưu danh sách chờ vào bộ nhớ máy để không mất khi thoát/tải lại app ======
+const PENDING_KEY = 'vt_pending_v1';
+
+function savePending() {
+  try { localStorage.setItem(PENDING_KEY, JSON.stringify(pending)); } catch (e) {}
+}
+
+function loadPending() {
+  try {
+    const raw = localStorage.getItem(PENDING_KEY);
+    if (!raw) return { giao: [], nhan: [] };
+    const o = JSON.parse(raw);
+    const clean = function (arr) {
+      return Array.isArray(arr)
+        ? arr.filter(function (it) { return it && it.lsx && it.stt && Number(it.sl) > 0; })
+        : [];
+    };
+    return { giao: clean(o.giao), nhan: clean(o.nhan) };
+  } catch (e) {
+    return { giao: [], nhan: [] };
+  }
+}
+
+let pending = loadPending(); // danh sách chờ lưu của từng tab (khôi phục từ lần trước)
 
     let versions = { giao: -1, nhan: -1 }; // -1 để lần đầu luôn tải dữ liệu
     let pollTimer = null;
@@ -376,6 +399,12 @@
       });
 
       setupQuickEntry();
+
+      // Khôi phục danh sách chờ lưu từ lần dùng trước
+      renderPending('giao');
+      renderPending('nhan');
+      const restored = pending.giao.length + pending.nhan.length;
+      if (restored) showToast('Đã khôi phục ' + restored + ' mục chưa lưu từ lần trước.', false, 4500);
 
       loadHistory('giao');
       loadHistory('nhan');
@@ -797,6 +826,14 @@ function stopScanner(tab) {
       resetForm(tab);
     }
 
+        // Gõ tới đâu lưu tới đó (chỉ lưu khi giá trị hợp lệ)
+    function onQtyInput(tab, idx, val) {
+      const n = Number(val);
+      if (!val || isNaN(n) || n <= 0 || !pending[tab][idx]) return;
+      pending[tab][idx].sl = String(val).trim();
+      savePending();
+    }
+
     function updatePendingQty(tab, idx, val) {
   const n = Number(val);
   if (!val || isNaN(n) || n <= 0) {
@@ -805,6 +842,7 @@ function stopScanner(tab) {
     return;
   }
   pending[tab][idx].sl = String(val).trim();
+  savePending();
 }
 
     function removeFromList(tab, idx) {
@@ -814,6 +852,7 @@ function stopScanner(tab) {
 
         function renderPending(tab) {
       const tbody = document.querySelector('#' + tab + '-pending-table tbody');
+      savePending(); // ghi nhớ mỗi khi danh sách thay đổi
       document.getElementById(tab + '-pending-count').innerText = pending[tab].length;
       document.getElementById(tab + '-save-count').innerText = pending[tab].length;
 
@@ -829,6 +868,7 @@ function stopScanner(tab) {
           '<td>' + chiTiet + '</td>' +
           '<td>' + sldh + '</td>' +
           '<td><input class="qty-input" type="number" inputmode="decimal" value="' + it.sl + '" ' +
+            'oninput="onQtyInput(\'' + tab + '\',' + idx + ',this.value)" ' +
             'onchange="updatePendingQty(\'' + tab + '\',' + idx + ',this.value)"></td>' +
           '<td><button class="rm-btn" onclick="removeFromList(\'' + tab + '\',' + idx + ')"><i class="fa-solid fa-trash-can"></i></button></td>' +
           '</tr>';
@@ -863,7 +903,12 @@ function stopScanner(tab) {
           loadHistory(tab); // đồng bộ ngay với dữ liệu thật trên Sheet, không cần chờ vòng poll tiếp theo
         })
         .catch(function (err) {
-          showToast('Lỗi khi lưu vào Sheet: ' + err.message, true);
+          // Lưu thất bại -> trả các mục về danh sách chờ để bấm lưu lại
+          pending[tab] = items.concat(pending[tab]);
+          renderPending(tab);
+          versions[tab] = -1;   // ép tải lại lịch sử thật, bỏ dòng hiển thị tạm
+          loadHistory(tab);
+          showToast('Lưu thất bại, đã trả ' + items.length + ' mục về danh sách chờ. ' + err.message, true, 6000);
         });
     }
 
