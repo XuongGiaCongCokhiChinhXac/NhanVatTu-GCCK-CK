@@ -175,6 +175,30 @@
   .status-ok{color:var(--accent-dark);font-weight:700;}
   .status-thieu{color:var(--danger);font-weight:700;}
   .hidden{display:none !important;}
+
+  /* ===== Quét nhiều mã QR ===== */
+  .scan-stage{aspect-ratio:1/1;}
+  .scan-panel{margin-top:12px;}
+  .scan-panel-hint{
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    font-size:14px; font-weight:700; color:var(--accent-dark); margin-bottom:10px;
+  }
+  .scan-panel .btn-row{
+    position:sticky; bottom:84px; z-index:5; background:var(--card);
+    padding:6px 0; margin-top:0;
+  }
+  .scan-panel .btn{min-height:48px;font-size:15px;}
+  .scan-list{display:flex;flex-direction:column;gap:8px;margin-top:8px;}
+  .scan-item{
+    display:flex; align-items:center; gap:10px; padding:10px 12px;
+    border-radius:14px; background:var(--accent-soft); border:1px solid var(--accent);
+  }
+  .scan-no{
+    flex:0 0 26px; height:26px; border-radius:50%; background:var(--accent); color:#fff;
+    font-size:13px; font-weight:800; display:flex; align-items:center; justify-content:center;
+  }
+  .scan-info{flex:1;min-width:0;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .scan-x{width:32px;height:32px;border:none;background:transparent;color:var(--muted);font-size:16px;cursor:pointer;}
 </style>
 </head>
 <body>
@@ -591,29 +615,28 @@ async function startScanner(tab) {
     const st = {
       stream: stream, video: video, overlay: overlay, stage: stage, detector: detector,
       work: document.createElement('canvas'),
-      active: true, locked: false, busy: false, last: 0, raf: 0
+      active: true, busy: false, last: 0, raf: 0,
+      batch: [],          // các mã đã đọc trong lần quét này
+      seen: new Set(),    // nội dung QR đã đọc -> không đọc lại
+      tracks: new Map(),  // vị trí khung của từng mã để vẽ lên camera
+      panel: null
     };
     scanState[tab] = st;
     scannerRunning[tab] = true;
     btn.innerHTML = '<i class="fa-solid fa-stop"></i> Dừng quét';
+    buildPanel(tab, st);
 
     function tick(ts) {
       if (!st.active) return;
       st.raf = requestAnimationFrame(tick);
-      if (st.locked || st.busy || video.readyState < 2 || ts - st.last < 80) return;
+      if (st.busy || video.readyState < 2 || ts - st.last < 80) return;
       st.last = ts;
       st.busy = true;
-      detectFrame(st).then(function (res) {
+      detectFrame(st).then(function (list) {
         st.busy = false;
-        if (!st.active || st.locked) return;
-        if (res) {
-          st.locked = true;
-          drawBox(st, res.points);                 // khung xanh bám vào QR
-          if (navigator.vibrate) navigator.vibrate(60);
-          setTimeout(function () { if (st.active) onScanSuccess(tab, res.text); }, 350);
-        } else {
-          clearOverlay(st);
-        }
+        if (!st.active) return;
+        handleDetected(tab, st, list || []);
+        drawBoxes(st);
       }).catch(function () { st.busy = false; });
     }
     st.raf = requestAnimationFrame(tick);
@@ -631,73 +654,50 @@ async function startScanner(tab) {
 async function detectFrame(st) {
   const v = st.video;
   const w = v.videoWidth, h = v.videoHeight;
-  if (!w || !h) return null;
+  if (!w || !h) return [];
 
-  // Ưu tiên bộ đọc gốc của trình duyệt (nhanh, đọc được QR dày)
+  // Ưu tiên bộ đọc gốc của trình duyệt: trả về TẤT CẢ mã trong khung
   if (st.detector) {
     try {
       const codes = await st.detector.detect(v);
-      if (codes && codes.length && codes[0].rawValue) {
+      return (codes || []).filter(function (c) { return c.rawValue; }).map(function (c) {
         return {
-          text: codes[0].rawValue,
-          points: codes[0].cornerPoints.map(function (p) { return [p.x, p.y]; })
+          text: c.rawValue,
+          points: c.cornerPoints.map(function (p) { return [p.x, p.y]; })
         };
-      }
-      return null;
-    } catch (e) { st.detector = null; } // lỗi thì chuyển sang jsQR
+      });
+    } catch (e) { st.detector = null; } // lỗi thì chuyển sang ZXing/jsQR
   }
 
-    // Dự phòng cho máy không có BarcodeDetector (iPhone/Safari, máy đời cũ).
-  // Luân phiên 2 kiểu quét: (A) cắt vùng giữa ở độ phân giải gốc, (B) toàn khung thu nhỏ.
-  st.pass = (st.pass || 0) + 1;
-  let sx = 0, sy = 0, sw = w, sh = h, maxSide = 1280;
-  if (st.pass % 2 === 1) {
-    const side = Math.round(Math.min(w, h) * 0.75);
-    sw = side; sh = side;
-    sx = Math.round((w - side) / 2);
-    sy = Math.round((h - side) / 2);
-    maxSide = 1100;
-  }
-  const scale = Math.min(1, maxSide / Math.max(sw, sh));
-  const cw = Math.round(sw * scale), ch = Math.round(sh * scale);
+  // Dự phòng (iPhone/Safari không có BarcodeDetector):
+  // đọc 1 mã -> tô trắng mã đó -> đọc tiếp, tối đa 6 mã mỗi lượt
+  const scale = Math.min(1, 1280 / Math.max(w, h));
+  const cw = Math.round(w * scale), ch = Math.round(h * scale);
   const cv = st.work;
   cv.width = cw; cv.height = ch;
   const ctx = cv.getContext('2d', { willReadFrequently: true });
-  ctx.drawImage(v, sx, sy, sw, sh, 0, 0, cw, ch);
-
+  ctx.drawImage(v, 0, 0, cw, ch);
   const img = ctx.getImageData(0, 0, cw, ch);
-  enhanceContrast(img.data);          // chuyển xám + kéo giãn tương phản
+  enhanceContrast(img.data);
   ctx.putImageData(img, 0, 0);
 
-  function mapPt(x, y) { return [x / scale + sx, y / scale + sy]; }
-
-  // Thử lần 1: ZXing
-  if (typeof ZXing !== 'undefined') {
-    try {
-      if (!st.zx) {
-        const hints = new Map();
-        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
-        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-        st.zx = new ZXing.MultiFormatReader();
-        st.zx.setHints(hints);
-      }
-      const lum = new ZXing.HTMLCanvasElementLuminanceSource(cv);
-      const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-      const r = st.zx.decode(bmp);
-      const pts = r.getResultPoints().map(function (p) { return mapPt(p.getX(), p.getY()); });
-      return { text: r.getText(), points: boxFromPoints(pts) };
-    } catch (e) { /* không thấy QR, thử jsQR */ }
+  const out = [];
+  for (let k = 0; k < 6; k++) {
+    const r = zxDecode(cv) || jsqrDecode(cv, ctx);
+    if (!r) break;
+    const b = r.box;
+    // thu nhỏ khung một chút để vẽ cho vừa mã
+    const cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+    const hw = (b[2] - b[0]) / 2 * 0.85, hh = (b[3] - b[1]) / 2 * 0.85;
+    out.push({
+      text: r.text,
+      points: [[cx - hw, cy - hh], [cx + hw, cy - hh], [cx + hw, cy + hh], [cx - hw, cy + hh]]
+        .map(function (p) { return [p[0] / scale, p[1] / scale]; })
+    });
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(b[0], b[1], b[2] - b[0], b[3] - b[1]); // tô trắng để đọc mã kế tiếp
   }
-
-  // Thử lần 2: jsQR
-  const code = jsQR(img.data, cw, ch, { inversionAttempts: 'dontInvert' });
-  if (!code) return null;
-  const l = code.location;
-  return {
-    text: code.data,
-    points: [l.topLeftCorner, l.topRightCorner, l.bottomRightCorner, l.bottomLeftCorner]
-      .map(function (p) { return mapPt(p.x, p.y); })
-  };
+  return out;
 }
 
 // Chuyển ảnh xám và kéo giãn độ tương phản (giúp QR mờ/xám rõ nét hơn)
@@ -734,28 +734,179 @@ function boxFromPoints(pts) {
   return [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY]];
 }
 
-function drawBox(st, pts) {
-  const c = st.overlay, v = st.video;
-  c.width = st.stage.clientWidth;
-  c.height = st.stage.clientHeight;
-  // quy đổi toạ độ video -> toạ độ hiển thị (object-fit: cover)
-  const s = Math.max(c.width / v.videoWidth, c.height / v.videoHeight);
-  const ox = (c.width - v.videoWidth * s) / 2;
-  const oy = (c.height - v.videoHeight * s) / 2;
-  const ctx = c.getContext('2d');
-  ctx.clearRect(0, 0, c.width, c.height);
-  ctx.beginPath();
-  pts.forEach(function (p, i) {
-    const x = p[0] * s + ox, y = p[1] * s + oy;
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
   });
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(14,159,110,.25)';
-  ctx.strokeStyle = '#22c55e';
-  ctx.lineWidth = 4;
-  ctx.lineJoin = 'round';
-  ctx.fill();
-  ctx.stroke();
+}
+
+// Định dạng QR: LSX|STT|MSCT|Tên chi tiết|SL/ĐH
+function parseQR(text) {
+  const p = String(text).split('|').map(function (s) { return s.trim(); });
+  if (p.length < 5) return null;
+  const q = Number(p[4]);
+  if (!p[0] || !p[1] || isNaN(q) || q <= 0) return null;
+  return { lsx: p[0], stt: p[1], msct: p[2], tenChiTiet: p[3], slDh: p[4], sl: p[4], raw: text };
+}
+
+// Mã có nằm trong vùng đang nhìn thấy trên màn hình không (video bị cắt do object-fit: cover)
+function inView(st, pts) {
+  const v = st.video, W = st.stage.clientWidth, H = st.stage.clientHeight;
+  const s = Math.max(W / v.videoWidth, H / v.videoHeight);
+  const x0 = (v.videoWidth - W / s) / 2, y0 = (v.videoHeight - H / s) / 2;
+  let cx = 0, cy = 0;
+  pts.forEach(function (p) { cx += p[0]; cy += p[1]; });
+  cx /= pts.length; cy /= pts.length;
+  return cx >= x0 && cx <= x0 + W / s && cy >= y0 && cy <= y0 + H / s;
+}
+
+// Xử lý các mã thấy trong 1 khung hình: mã đã đọc rồi thì bỏ qua
+function handleDetected(tab, st, list) {
+  const now = performance.now();
+  list.forEach(function (res) {
+    if (!inView(st, res.points)) return;
+
+    let tr = st.tracks.get(res.text);
+    if (!tr) { tr = { points: res.points, seen: now, item: null }; st.tracks.set(res.text, tr); }
+    tr.points = res.points;
+    tr.seen = now;
+
+    if (st.seen.has(res.text)) return;   // ĐÃ ĐỌC RỒI -> không đọc lại
+    st.seen.add(res.text);
+
+    const item = parseQR(res.text);
+    if (!item) { showToast('Có mã QR không đúng định dạng.', true); return; }
+
+    const key = item.lsx + '-' + item.stt;
+    const dup = pending[tab].some(function (p) { return p.lsx + '-' + p.stt === key; }) ||
+                st.batch.some(function (p) { return p.lsx + '-' + p.stt === key; });
+    if (dup) { showToast('Đã có trong danh sách: ' + key, true); return; }
+
+    st.batch.push(item);
+    tr.item = item;
+    if (navigator.vibrate) navigator.vibrate(50);
+    renderBatch(tab, st);
+  });
+}
+
+// Vẽ khung + số thứ tự lên từng mã đang thấy (xanh = đã nhận, cam = bỏ qua)
+function drawBoxes(st) {
+  const c = st.overlay, v = st.video;
+  const W = st.stage.clientWidth, H = st.stage.clientHeight;
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+  if (!v.videoWidth) return;
+  const s = Math.max(W / v.videoWidth, H / v.videoHeight);
+  const ox = (W - v.videoWidth * s) / 2, oy = (H - v.videoHeight * s) / 2;
+  const now = performance.now();
+
+  st.tracks.forEach(function (tr) {
+    if (now - tr.seen > 700) return;            // mã không còn trong khung thì ẩn khung
+    const idx = tr.item ? st.batch.indexOf(tr.item) : -1;
+    const ok = idx > -1;
+
+    ctx.beginPath();
+    tr.points.forEach(function (p, i) {
+      const x = p[0] * s + ox, y = p[1] * s + oy;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = ok ? 'rgba(34,197,94,.25)' : 'rgba(245,158,11,.25)';
+    ctx.strokeStyle = ok ? '#22c55e' : '#f59e0b';
+    ctx.lineWidth = 4;
+    ctx.lineJoin = 'round';
+    ctx.fill();
+    ctx.stroke();
+
+    if (ok) {                                    // huy hiệu số thứ tự
+      const bx = tr.points[0][0] * s + ox, by = tr.points[0][1] * s + oy;
+      ctx.beginPath();
+      ctx.arc(bx, by, 14, 0, Math.PI * 2);
+      ctx.fillStyle = '#16a34a';
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 15px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(idx + 1), bx, by + 1);
+    }
+  });
+}
+
+// Bảng danh sách các mã vừa quét (nằm ngay dưới khung camera)
+function buildPanel(tab, st) {
+  let panel = document.getElementById('scan-panel-' + tab);
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'scan-panel-' + tab;
+    panel.className = 'scan-panel';
+    st.stage.insertAdjacentElement('afterend', panel);
+  }
+  panel.classList.remove('hidden');
+  st.panel = panel;
+  renderBatch(tab, st);
+}
+
+function renderBatch(tab, st) {
+  const p = st.panel;
+  if (!p) return;
+  const n = st.batch.length;
+  p.innerHTML =
+    '<div class="scan-panel-hint"><i class="fa-solid fa-expand"></i> ' +
+      (n ? 'Quét tiếp hoặc bấm xác nhận' : 'Đưa các mã QR vào khung để quét') + '</div>' +
+    '<div class="btn-row">' +
+      '<button class="btn btn-primary" ' + (n ? '' : 'disabled ') + 'onclick="confirmBatch(\'' + tab + '\')">' +
+        '<i class="fa-solid fa-check"></i> Xác nhận ' + n + ' mã</button>' +
+      '<button class="btn btn-ghost" ' + (n ? '' : 'disabled ') + 'onclick="clearBatch(\'' + tab + '\')">' +
+        '<i class="fa-solid fa-eraser"></i> Xóa</button>' +
+    '</div>' +
+    '<div class="scan-list">' +
+      st.batch.map(function (it, i) {
+        return '<div class="scan-item"><span class="scan-no">' + (i + 1) + '</span>' +
+          '<div class="scan-info"><b>' + escHtml(it.lsx) + '</b> · STT ' + escHtml(it.stt) +
+          ' · ' + escHtml(it.tenChiTiet || it.msct) + ' · SL ' + escHtml(it.slDh) + '</div>' +
+          '<button class="scan-x" onclick="removeBatchItem(\'' + tab + '\',' + i + ')"><i class="fa-solid fa-xmark"></i></button></div>';
+      }).join('') +
+    '</div>';
+}
+
+function confirmBatch(tab) { stopScanner(tab); }  // dừng camera và đưa các mã vào danh sách chờ lưu
+
+function clearBatch(tab) {                          // xóa hết, cho phép quét lại từ đầu
+  const st = scanState[tab];
+  if (!st) return;
+  st.batch = [];
+  st.seen.clear();
+  st.tracks.clear();
+  renderBatch(tab, st);
+}
+
+function removeBatchItem(tab, i) {
+  const st = scanState[tab];
+  if (!st) return;
+  st.batch.splice(i, 1);
+  renderBatch(tab, st);
+}
+
+// Đưa các mã đã quét vào danh sách chờ lưu (có lưu bộ nhớ nhờ renderPending -> savePending)
+function commitBatch(tab, st) {
+  if (!st || !st.batch.length) return;
+  const keys = new Set(pending[tab].map(function (p) { return p.lsx + '-' + p.stt; }));
+  let added = 0;
+  st.batch.forEach(function (it) {
+    const key = it.lsx + '-' + it.stt;
+    if (keys.has(key)) return;
+    keys.add(key);
+    pending[tab].push({
+      lsx: it.lsx, stt: it.stt, msct: it.msct,
+      tenChiTiet: it.tenChiTiet, slDh: it.slDh, sl: it.sl
+    });
+    added++;
+  });
+  st.batch = [];
+  renderPending(tab);
+  showToast('Đã thêm ' + added + ' mục vào danh sách chờ lưu');
 }
 
 function clearOverlay(st) {
@@ -772,9 +923,11 @@ function stopScanner(tab) {
   st.video.srcObject = null;
   clearOverlay(st);
   st.stage.classList.add('hidden');
+  if (st.panel) st.panel.classList.add('hidden');
   scanState[tab] = null;
   scannerRunning[tab] = false;
   document.getElementById(tab + '-scan-btn').innerHTML = '<i class="fa-solid fa-qrcode"></i> Bắt đầu quét QR';
+  commitBatch(tab, st); // mã đã quét mà chưa xác nhận cũng không bị mất
 }
 
     function onScanSuccess(tab, text) {
