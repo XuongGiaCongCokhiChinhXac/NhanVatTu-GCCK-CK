@@ -197,7 +197,18 @@
     flex:0 0 26px; height:26px; border-radius:50%; background:var(--accent); color:#fff;
     font-size:13px; font-weight:800; display:flex; align-items:center; justify-content:center;
   }
-  .scan-info{flex:1;min-width:0;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .scan-info{flex:1;min-width:0;font-size:13.5px;line-height:1.35;}
+  .scan-info .l1,.scan-info .l2{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .scan-info .l2{font-size:12px;color:var(--muted);}
+  .scan-qty-wrap{flex:0 0 auto;text-align:center;}
+  .scan-qty-wrap small{display:block;font-size:10.5px;font-weight:800;color:var(--accent-dark);text-transform:uppercase;margin-bottom:2px;}
+  .scan-qty{
+    width:72px;padding:8px 4px;font-size:17px;font-weight:800;text-align:center;
+    border:1.5px solid var(--accent);border-radius:10px;background:#fff;color:var(--text);
+    -webkit-appearance:none;appearance:none;
+  }
+  .scan-qty:focus{outline:none;box-shadow:0 0 0 3px var(--accent-soft);}
+  .scan-qty.over{border-color:#f59e0b;background:#fffbeb;}
   .scan-x{width:32px;height:32px;border:none;background:transparent;color:var(--muted);font-size:16px;cursor:pointer;}
 </style>
 </head>
@@ -851,10 +862,19 @@ function buildPanel(tab, st) {
 function renderBatch(tab, st) {
   const p = st.panel;
   if (!p) return;
+
+  // Nhớ ô số lượng đang gõ dở để vẽ lại xong vẫn gõ tiếp được
+  const ae = document.activeElement;
+  let focusIdx = -1, focusVal = '';
+  if (ae && ae.classList && ae.classList.contains('scan-qty') && p.contains(ae)) {
+    focusIdx = Number(ae.dataset.i);
+    focusVal = ae.value;
+  }
+
   const n = st.batch.length;
   p.innerHTML =
     '<div class="scan-panel-hint"><i class="fa-solid fa-expand"></i> ' +
-      (n ? 'Quét tiếp hoặc bấm xác nhận' : 'Đưa các mã QR vào khung để quét') + '</div>' +
+      (n ? 'Quét tiếp, sửa số lượng nếu cần rồi bấm xác nhận' : 'Đưa các mã QR vào khung để quét') + '</div>' +
     '<div class="btn-row">' +
       '<button class="btn btn-primary" ' + (n ? '' : 'disabled ') + 'onclick="confirmBatch(\'' + tab + '\')">' +
         '<i class="fa-solid fa-check"></i> Xác nhận ' + n + ' mã</button>' +
@@ -863,12 +883,55 @@ function renderBatch(tab, st) {
     '</div>' +
     '<div class="scan-list">' +
       st.batch.map(function (it, i) {
+        const over = Number(it.sl) > Number(it.slDh);
         return '<div class="scan-item"><span class="scan-no">' + (i + 1) + '</span>' +
-          '<div class="scan-info"><b>' + escHtml(it.lsx) + '</b> · STT ' + escHtml(it.stt) +
-          ' · ' + escHtml(it.tenChiTiet || it.msct) + ' · SL ' + escHtml(it.slDh) + '</div>' +
+          '<div class="scan-info">' +
+            '<div class="l1"><b>' + escHtml(it.lsx) + '</b> · STT ' + escHtml(it.stt) + '</div>' +
+            '<div class="l2">' + escHtml(it.tenChiTiet || it.msct) + ' · SL/ĐH ' + escHtml(it.slDh) + '</div>' +
+          '</div>' +
+          '<div class="scan-qty-wrap"><small>' + (tab === 'giao' ? 'Giao' : 'Nhận') + '</small>' +
+            '<input class="scan-qty' + (over ? ' over' : '') + '" type="number" inputmode="decimal" ' +
+              'data-i="' + i + '" value="' + escHtml(it.sl) + '" ' +
+              'oninput="onBatchQtyInput(\'' + tab + '\',' + i + ',this)" ' +
+              'onchange="onBatchQtyChange(\'' + tab + '\',' + i + ',this)" ' +
+              'onkeydown="if(event.key===\'Enter\'){this.blur();}">' +
+          '</div>' +
           '<button class="scan-x" onclick="removeBatchItem(\'' + tab + '\',' + i + ')"><i class="fa-solid fa-xmark"></i></button></div>';
       }).join('') +
     '</div>';
+
+  // Trả lại con trỏ cho ô đang gõ
+  if (focusIdx > -1) {
+    const el = p.querySelector('.scan-qty[data-i="' + focusIdx + '"]');
+    if (el) { el.value = focusVal; try { el.focus(); } catch (e) {} }
+  }
+}
+
+// Gõ tới đâu cập nhật tới đó (chỉ nhận giá trị hợp lệ), không vẽ lại bảng để không mất con trỏ
+function onBatchQtyInput(tab, i, el) {
+  const st = scanState[tab];
+  if (!st || !st.batch[i]) return;
+  const n = Number(el.value);
+  if (!el.value || isNaN(n) || n <= 0) return;
+  st.batch[i].sl = String(el.value).trim();
+  el.classList.toggle('over', n > Number(st.batch[i].slDh));
+}
+
+// Gõ xong (rời ô): kiểm tra, sai thì trả về số cũ
+function onBatchQtyChange(tab, i, el) {
+  const st = scanState[tab];
+  if (!st || !st.batch[i]) return;
+  const n = Number(el.value);
+  if (!el.value || isNaN(n) || n <= 0) {
+    showToast('Số lượng phải lớn hơn 0.', true);
+    el.value = st.batch[i].sl;
+    el.classList.toggle('over', Number(st.batch[i].sl) > Number(st.batch[i].slDh));
+    return;
+  }
+  st.batch[i].sl = String(el.value).trim();
+  const over = n > Number(st.batch[i].slDh);
+  el.classList.toggle('over', over);
+  if (over) showToast('Lưu ý: số lượng lớn hơn SL/ĐH (' + st.batch[i].slDh + ').', true);
 }
 
 function confirmBatch(tab) { stopScanner(tab); }  // dừng camera và đưa các mã vào danh sách chờ lưu
