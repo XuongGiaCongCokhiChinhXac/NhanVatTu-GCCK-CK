@@ -210,6 +210,11 @@
   .scan-qty:focus{outline:none;box-shadow:0 0 0 3px var(--accent-soft);}
   .scan-qty.over{border-color:#f59e0b;background:#fffbeb;}
   .scan-x{width:32px;height:32px;border:none;background:transparent;color:var(--muted);font-size:16px;cursor:pointer;}
+    @keyframes scanPop{
+    0%{transform:scale(.96);background:#bbf7d0;}
+    100%{transform:scale(1);background:var(--accent-soft);}
+  }
+  .scan-item:first-child{animation:scanPop .35s ease-out;}
 </style>
 </head>
 <body>
@@ -599,7 +604,7 @@ async function startScanner(tab) {
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
     });
 
     // Bật tự động lấy nét liên tục nếu thiết bị hỗ trợ (Android)
@@ -682,19 +687,24 @@ async function detectFrame(st) {
 
   // Dự phòng (iPhone/Safari không có BarcodeDetector):
   // đọc 1 mã -> tô trắng mã đó -> đọc tiếp, tối đa 6 mã mỗi lượt
-  const scale = Math.min(1, 1280 / Math.max(w, h));
+  // Quét trực tiếp: thu nhỏ còn ~720px cho nhẹ (QR cầm gần vẫn đủ nét)
+  const scale = Math.min(1, 720 / Math.max(w, h));
   const cw = Math.round(w * scale), ch = Math.round(h * scale);
   const cv = st.work;
-  cv.width = cw; cv.height = ch;
+  if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }
   const ctx = cv.getContext('2d', { willReadFrequently: true });
   ctx.drawImage(v, 0, 0, cw, ch);
-  const img = ctx.getImageData(0, 0, cw, ch);
-  enhanceContrast(img.data);
-  ctx.putImageData(img, 0, 0);
+  st.fc = (st.fc || 0) + 1;
 
   const out = [];
   for (let k = 0; k < 6; k++) {
-    const r = zxDecode(cv) || jsqrDecode(cv, ctx);
+    // 1) jsQR nhanh, không tăng tương phản
+    let r = jsqrDecode(cv, ctx, true);
+    // 2) Không ra thì thử xen kẽ các cách nặng hơn (chỉ ở mã đầu tiên của khung)
+    if (!r && k === 0) {
+      if (st.fc % 2 === 0) r = zxDecode(cv, true);                 // ZXing bản nhẹ
+      else if (st.fc % 3 === 0) r = jsqrDecode(cv, ctx, false);    // có tăng tương phản
+    }
     if (!r) break;
     const b = r.box;
     // thu nhỏ khung một chút để vẽ cho vừa mã
@@ -793,7 +803,7 @@ function handleDetected(tab, st, list) {
                 st.batch.some(function (p) { return p.lsx + '-' + p.stt === key; });
     if (dup) { showToast('Đã có trong danh sách: ' + key, true); return; }
 
-    st.batch.push(item);
+    st.batch.unshift(item);   // mã mới quét nằm trên cùng
     tr.item = item;
     if (navigator.vibrate) navigator.vibrate(50);
     renderBatch(tab, st);
@@ -804,7 +814,7 @@ function handleDetected(tab, st, list) {
 function drawBoxes(st) {
   const c = st.overlay, v = st.video;
   const W = st.stage.clientWidth, H = st.stage.clientHeight;
-  c.width = W; c.height = H;
+  if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, W, H);
   if (!v.videoWidth) return;
@@ -840,7 +850,7 @@ function drawBoxes(st) {
       ctx.font = 'bold 15px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(String(idx + 1), bx, by + 1);
+      ctx.fillText(String(st.batch.length - idx), bx, by + 1);
     }
   });
 }
@@ -884,7 +894,7 @@ function renderBatch(tab, st) {
     '<div class="scan-list">' +
       st.batch.map(function (it, i) {
         const over = Number(it.sl) > Number(it.slDh);
-        return '<div class="scan-item"><span class="scan-no">' + (i + 1) + '</span>' +
+        return '<div class="scan-item"><span class="scan-no">' + (n - i) + '</span>' +
           '<div class="scan-info">' +
             '<div class="l1"><b>' + escHtml(it.lsx) + '</b> · STT ' + escHtml(it.stt) + '</div>' +
             '<div class="l2">' + escHtml(it.tenChiTiet || it.msct) + ' · SL/ĐH ' + escHtml(it.slDh) + '</div>' +
@@ -957,7 +967,7 @@ function commitBatch(tab, st) {
   if (!st || !st.batch.length) return;
   const keys = new Set(pending[tab].map(function (p) { return p.lsx + '-' + p.stt; }));
   let added = 0;
-  st.batch.forEach(function (it) {
+  st.batch.slice().reverse().forEach(function (it) {   // đảo lại: mã quét trước vào trước
     const key = it.lsx + '-' + it.stt;
     if (keys.has(key)) return;
     keys.add(key);
@@ -1157,7 +1167,7 @@ function stopScanner(tab) {
     }
 
     // ================= ĐỌC NHIỀU ẢNH QR CÙNG LÚC =================
-let zxReader = null;
+let zxReaders = { f: null, h: null };
 
 function loadBitmap(file) {
   return new Promise(function (resolve, reject) {
@@ -1174,18 +1184,20 @@ function loadBitmap(file) {
   });
 }
 
-function zxDecode(cv) {
+function zxDecode(cv, fast) {
   if (typeof ZXing === 'undefined') return null;
   try {
-    if (!zxReader) {
+    const key = fast ? 'f' : 'h';           // f = nhanh (quét trực tiếp), h = kỹ (đọc từ ảnh)
+    if (!zxReaders[key]) {
       const hints = new Map();
       hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
-      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-      zxReader = new ZXing.MultiFormatReader();
-      zxReader.setHints(hints);
+      if (!fast) hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      const rd = new ZXing.MultiFormatReader();
+      rd.setHints(hints);
+      zxReaders[key] = rd;
     }
     const lum = new ZXing.HTMLCanvasElementLuminanceSource(cv);
-    const r = zxReader.decode(new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum)));
+    const r = zxReaders[key].decode(new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum)));
     const p = r.getResultPoints().map(function (q) { return [q.getX(), q.getY()]; });
     const xs = p.map(function (q) { return q[0]; }), ys = p.map(function (q) { return q[1]; });
     const x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs);
@@ -1195,12 +1207,12 @@ function zxDecode(cv) {
   } catch (e) { return null; }
 }
 
-function jsqrDecode(cv, ctx) {
+function jsqrDecode(cv, ctx, quick) {
   if (typeof jsQR === 'undefined') return null;
   const w = cv.width, h = cv.height;
   const img = ctx.getImageData(0, 0, w, h);
   let c = jsQR(img.data, w, h, { inversionAttempts: 'dontInvert' });
-  if (!c) {
+  if (!c && !quick) {
     enhanceContrast(img.data);
     c = jsQR(img.data, w, h, { inversionAttempts: 'dontInvert' });
   }
