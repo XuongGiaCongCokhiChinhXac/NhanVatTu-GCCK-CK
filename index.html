@@ -327,6 +327,37 @@
   .modal-box p{margin:0 0 16px;font-size:14px;color:var(--muted);line-height:1.45;}
   .btn-danger{background:var(--danger);color:#fff;box-shadow:0 8px 16px -8px var(--danger);}
   .btn-row .btn-danger{flex:1;}
+
+  /* ===== Lịch sử dạng bảng (header xanh đậm) ===== */
+  .hist-body{padding:8px 0 110px !important; overflow:auto; -webkit-overflow-scrolling:touch;}
+  .ht-table{border-collapse:separate;border-spacing:0;font-size:13px;min-width:980px;width:100%;}
+  .ht-table th{
+    position:sticky; top:0; z-index:2; background:#0040a8; color:#fff; font-weight:800;
+    padding:12px 10px; white-space:nowrap; text-align:center; font-size:13px;
+    border-right:1px solid rgba(255,255,255,.25); border-bottom:1px solid #002f7d;
+  }
+  .ht-table td{
+    padding:8px 10px; text-align:center; white-space:nowrap; background:#fff; color:var(--text);
+    border-right:1px solid var(--border); border-bottom:1px solid var(--border);
+  }
+  .ht-table tbody tr:nth-child(even) td{background:#f1f5f9;}
+  .ht-table td.c-ten{text-align:left;min-width:230px;}
+  .ht-table th:first-child{left:0; z-index:4;}
+  .ht-table td:first-child{position:sticky; left:0; z-index:1; font-weight:800; box-shadow:2px 0 4px rgba(15,23,42,.08);}
+  .ht-table tr.is-edit td{background:#fffbeb !important;}
+  .ht-table tr.is-del td{background:#fef2f2 !important; color:#94a3b8; text-decoration:line-through;}
+  .ht-table tr.is-del td:last-child{text-decoration:none;}
+  .ht-qty{
+    width:70px;padding:7px 4px;font-size:15px;font-weight:800;text-align:center;
+    border:1.5px solid var(--border);border-radius:8px;background:#fff;color:var(--text);
+    -webkit-appearance:none;appearance:none;
+  }
+  .ht-qty:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);}
+  .ht-qty.over{border-color:#f59e0b;background:#fffbeb;}
+  .ht-qty:disabled{opacity:.5;}
+  .ht-del{width:34px;height:34px;border:none;border-radius:9px;background:#fee2e2;color:var(--danger);font-size:14px;cursor:pointer;}
+  .ht-del:active{transform:scale(.92);}
+  .ht-more{position:sticky; left:12px; width:calc(100vw - 24px); margin:12px 0 0 12px;}
 </style>
 </head>
 <body>
@@ -1358,6 +1389,263 @@ async function handlePhotos(tab, input) {
   if (failed.length) msg += ' · không đọc được ảnh số ' + failed.join(', ');
   showToast(msg, !!(failed.length || bad || !added), 6000);
 }
+
+    // ================= LỊCH SỬ: DẠNG BẢNG, XEM / SỬA / XOÁ =================
+    const HIST_PAGE = 200;
+    const hist = {
+      tab: 'nhan', rows: [], matched: 0, limit: HIST_PAGE, query: '',
+      edits: {}, dels: {},
+      loading: false, saving: false, error: '', reqId: 0, timer: null
+    };
+
+    function askConfirm(title, msg, yesLabel, danger) {
+      return new Promise(function (resolve) {
+        const m = document.getElementById('confirmModal');
+        const yes = document.getElementById('confirmYes');
+        const no = document.getElementById('confirmNo');
+        m.querySelector('.modal-box').classList.toggle('danger', !!danger);
+        document.getElementById('confirmTitle').textContent = title;
+        document.getElementById('confirmMsg').textContent = msg;
+        yes.textContent = yesLabel || 'Đồng ý';
+        yes.className = 'btn ' + (danger ? 'btn-danger' : 'btn-primary');
+        function done(v) { m.classList.add('hidden'); yes.onclick = null; no.onclick = null; resolve(v); }
+        yes.onclick = function () { done(true); };
+        no.onclick = function () { done(false); };
+        m.classList.remove('hidden');
+      });
+    }
+
+    function histChangeTotal() { return Object.keys(hist.edits).length + Object.keys(hist.dels).length; }
+
+    function updateHistFoot() {
+      const n = histChangeTotal();
+      const c = document.getElementById('histChangeCount');
+      if (c) c.textContent = n;
+      document.getElementById('histFoot').classList.toggle('show', n > 0);
+    }
+
+    function findHistRow(row) {
+      for (let i = 0; i < hist.rows.length; i++) if (hist.rows[i].row === row) return hist.rows[i];
+      return null;
+    }
+
+    function openHistory() {
+      ['giao', 'nhan'].forEach(function (t) { if (scannerRunning[t]) stopScanner(t); });
+      hist.tab = currentTab;
+      hist.rows = []; hist.matched = 0; hist.limit = HIST_PAGE; hist.query = '';
+      hist.edits = {}; hist.dels = {}; hist.error = '';
+      document.getElementById('histSearch').value = '';
+      document.getElementById('histTitle').textContent = (hist.tab === 'giao') ? 'Lịch sử giao hàng' : 'Lịch sử nhận vật tư';
+      document.getElementById('histOverlay').classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+      loadHistoryRows();
+    }
+
+    async function closeHistory() {
+      if (hist.saving) return;
+      if (histChangeTotal() > 0) {
+        const ok = await askConfirm('Đóng lịch sử?', 'Bạn có thay đổi chưa lưu, đóng bây giờ sẽ mất các thay đổi này.', 'Đóng & bỏ', true);
+        if (!ok) return;
+      }
+      clearTimeout(hist.timer);
+      hist.reqId++;
+      hist.edits = {}; hist.dels = {};
+      document.getElementById('histOverlay').classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+
+    async function reloadHistory() {
+      if (hist.saving) return;
+      if (histChangeTotal() > 0) {
+        const ok = await askConfirm('Tải lại dữ liệu?', 'Các thay đổi chưa lưu sẽ bị bỏ.', 'Tải lại', true);
+        if (!ok) return;
+        hist.edits = {}; hist.dels = {};
+      }
+      loadHistoryRows();
+    }
+
+    function loadHistoryRows() {
+      const id = ++hist.reqId;
+      hist.loading = true; hist.error = '';
+      renderHistory();
+      callApi('getHistory', { type: hist.tab, query: hist.query, limit: hist.limit }).then(function (res) {
+        if (id !== hist.reqId) return;
+        hist.loading = false;
+        hist.rows = res.rows || [];
+        hist.matched = res.matched || 0;
+        renderHistory();
+      }).catch(function (err) {
+        if (id !== hist.reqId) return;
+        hist.loading = false;
+        hist.rows = []; hist.matched = 0;
+        hist.error = err.message || 'Không tải được dữ liệu.';
+        renderHistory();
+      });
+    }
+
+    function onHistSearch() {
+      clearTimeout(hist.timer);
+      hist.timer = setTimeout(function () {
+        hist.query = document.getElementById('histSearch').value.trim();
+        hist.limit = HIST_PAGE;
+        loadHistoryRows();
+      }, 400);
+    }
+
+    function histLoadMore() {
+      hist.limit += HIST_PAGE;
+      loadHistoryRows();
+    }
+
+    function renderHistory() {
+      const body = document.getElementById('histBody');
+      const cnt = document.getElementById('histCount');
+      updateHistFoot();
+      body.classList.toggle('loading', hist.loading && hist.rows.length > 0);
+
+      if (hist.loading && !hist.rows.length) {
+        body.innerHTML = '<div class="hist-empty"><i class="fa-solid fa-spinner fa-spin"></i>Đang tải dữ liệu...</div>';
+        cnt.textContent = '';
+        return;
+      }
+      if (hist.error) {
+        body.innerHTML = '<div class="hist-empty"><i class="fa-solid fa-triangle-exclamation"></i>' + escHtml(hist.error) +
+          '<br><br><button class="btn btn-soft" onclick="loadHistoryRows()"><i class="fa-solid fa-rotate"></i> Thử lại</button></div>';
+        cnt.textContent = '';
+        return;
+      }
+      cnt.textContent = hist.matched + ' mục' + (hist.query ? ' phù hợp' : '');
+      if (!hist.rows.length) {
+        body.innerHTML = '<div class="hist-empty"><i class="fa-regular fa-folder-open"></i>' +
+          (hist.query ? 'Không tìm thấy kết quả phù hợp.' : 'Chưa có dữ liệu.') + '</div>';
+        return;
+      }
+
+      const slLabel = (hist.tab === 'giao') ? 'SL giao' : 'SL nhận';
+      let html = '<table class="ht-table"><thead><tr>' +
+        '<th>LSX-STT</th><th>LSX</th><th>STT</th><th>MSCT</th><th>Tên chi tiết</th>' +
+        '<th>SL/ĐH</th><th>' + slLabel + '</th><th>Người</th><th>Ngày</th><th></th>' +
+        '</tr></thead><tbody>' + hist.rows.map(histRowHtml).join('') + '</tbody></table>';
+
+      if (hist.matched > hist.rows.length) {
+        html += '<button class="btn btn-soft ht-more" onclick="histLoadMore()"><i class="fa-solid fa-angles-down"></i> Xem thêm (' +
+          (hist.matched - hist.rows.length) + ' mục)</button>';
+      }
+      body.innerHTML = html;
+    }
+
+    function histRowHtml(r) {
+      const isDel = !!hist.dels[r.row];
+      const ed = hist.edits[r.row];
+      const sl = ed ? ed.sl : r.sl;
+      const over = Number(r.slDh) > 0 && Number(sl) > Number(r.slDh);
+      const slDh = (r.slDh !== '' && r.slDh != null) ? r.slDh : '';
+      return '<tr id="hr-' + r.row + '" class="' + (isDel ? 'is-del ' : '') + (ed ? 'is-edit' : '') + '">' +
+        '<td>' + escHtml(r.lsxStt) + '</td>' +
+        '<td>' + escHtml(r.lsx) + '</td>' +
+        '<td>' + escHtml(r.stt) + '</td>' +
+        '<td>' + escHtml(r.msct) + '</td>' +
+        '<td class="c-ten">' + escHtml(r.tenChiTiet) + '</td>' +
+        '<td>' + escHtml(slDh) + '</td>' +
+        '<td><input class="ht-qty' + (over ? ' over' : '') + '" type="number" inputmode="decimal" value="' + escHtml(sl) + '" ' +
+          (isDel ? 'disabled ' : '') +
+          'oninput="onHistQtyInput(' + r.row + ',this)" ' +
+          'onchange="onHistQtyChange(' + r.row + ',this)" ' +
+          'onkeydown="if(event.key===\'Enter\'){this.blur();}"></td>' +
+        '<td>' + escHtml(r.nguoi) + '</td>' +
+        '<td>' + escHtml(r.ngay) + '</td>' +
+        '<td><button class="ht-del" onclick="toggleHistDelete(' + r.row + ')" aria-label="Xoá">' +
+          '<i class="fa-solid ' + (isDel ? 'fa-rotate-left' : 'fa-trash-can') + '"></i></button></td>' +
+        '</tr>';
+    }
+
+    function onHistQtyInput(row, el) {
+      const r = findHistRow(row);
+      if (!r) return;
+      const v = String(el.value).trim(), n = Number(v);
+      if (!v || isNaN(n) || n <= 0) return;
+      const changed = n !== Number(r.sl);
+      if (changed) hist.edits[row] = { row: r.row, lsxStt: r.lsxStt, ts: r.ts, sl0: r.sl, sl: v };
+      else delete hist.edits[row];
+      const tr = document.getElementById('hr-' + row);
+      if (tr) tr.classList.toggle('is-edit', changed);
+      el.classList.toggle('over', Number(r.slDh) > 0 && n > Number(r.slDh));
+      updateHistFoot();
+    }
+
+    function onHistQtyChange(row, el) {
+      const r = findHistRow(row);
+      if (!r) return;
+      const v = String(el.value).trim(), n = Number(v);
+      if (!v || isNaN(n) || n <= 0) {
+        showToast('Số lượng phải lớn hơn 0.', true);
+        const ed = hist.edits[row];
+        el.value = ed ? ed.sl : r.sl;
+        el.classList.toggle('over', Number(r.slDh) > 0 && Number(el.value) > Number(r.slDh));
+        return;
+      }
+      if (Number(r.slDh) > 0 && n > Number(r.slDh)) showToast('Lưu ý: số lượng lớn hơn SL/ĐH (' + r.slDh + ').', true);
+    }
+
+    function toggleHistDelete(row) {
+      const r = findHistRow(row);
+      if (!r) return;
+      if (hist.dels[row]) {
+        delete hist.dels[row];
+      } else {
+        delete hist.edits[row];
+        hist.dels[row] = { row: r.row, lsxStt: r.lsxStt, ts: r.ts, sl0: r.sl };
+      }
+      const tr = document.getElementById('hr-' + row);
+      if (tr) tr.outerHTML = histRowHtml(r);
+      updateHistFoot();
+    }
+
+    function discardHistChanges() {
+      if (hist.saving) return;
+      hist.edits = {}; hist.dels = {};
+      renderHistory();
+    }
+
+    function setHistSaving(on) {
+      hist.saving = on;
+      const b = document.getElementById('histSave');
+      b.disabled = on;
+      document.getElementById('histDiscard').disabled = on;
+      b.innerHTML = on
+        ? '<i class="fa-solid fa-spinner fa-spin"></i> Đang lưu...'
+        : '<i class="fa-solid fa-floppy-disk"></i> Lưu thay đổi (<span id="histChangeCount">' + histChangeTotal() + '</span>)';
+    }
+
+    async function saveHistChanges() {
+      if (hist.saving) return;
+      const edits = Object.keys(hist.edits).map(function (k) { return hist.edits[k]; });
+      const dels = Object.keys(hist.dels).map(function (k) { return hist.dels[k]; });
+      if (!edits.length && !dels.length) return;
+
+      const parts = [];
+      if (edits.length) parts.push('sửa ' + edits.length + ' mục');
+      if (dels.length) parts.push('xoá ' + dels.length + ' mục');
+      const ok = await askConfirm(
+        'Lưu thay đổi vào Sheet?',
+        'Sẽ ' + parts.join(' và ') + ' trực tiếp trên Google Sheet.' + (dels.length ? ' Dòng đã xoá không thể khôi phục.' : ''),
+        'Lưu', dels.length > 0
+      );
+      if (!ok) return;
+
+      setHistSaving(true);
+      callApi('saveHistoryChanges', { type: hist.tab, edits: edits, deletes: dels })
+        .then(function (res) {
+          hist.edits = {}; hist.dels = {};
+          setHistSaving(false);
+          showToast(res.message || 'Đã lưu thành công!', false, 4000);
+          loadHistoryRows();
+        })
+        .catch(function (err) {
+          setHistSaving(false);
+          showToast('Lưu thất bại: ' + err.message, true, 6000);
+        });
+    }
 
     let toastTimer;
         function showToast(msg, isError, ms) {
