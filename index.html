@@ -15,6 +15,9 @@
   <!-- ===== HẾT PHẦN THÊM MỚI ===== -->
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap">
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
   <style>
@@ -328,34 +331,39 @@
   .btn-danger{background:var(--danger);color:#fff;box-shadow:0 8px 16px -8px var(--danger);}
   .btn-row .btn-danger{flex:1;}
 
-  /* ===== Lịch sử dạng bảng (header xanh đậm) ===== */
+    /* ===== Lịch sử dạng bảng (header xanh đậm, Roboto, chữ nhỏ) ===== */
   .hist-body{padding:8px 0 110px !important; overflow:auto; -webkit-overflow-scrolling:touch;}
-  .ht-table{border-collapse:separate;border-spacing:0;font-size:13px;min-width:980px;width:100%;}
+  .ht-table{
+    font-family:'Roboto',-apple-system,'Segoe UI',Arial,sans-serif;
+    border-collapse:separate; border-spacing:0; font-size:11px; min-width:640px; width:100%;
+  }
   .ht-table th{
-    position:sticky; top:0; z-index:2; background:#0040a8; color:#fff; font-weight:800;
-    padding:12px 10px; white-space:nowrap; text-align:center; font-size:13px;
+    position:sticky; top:0; z-index:2; background:#0040a8; color:#fff; font-weight:700;
+    padding:8px 6px; white-space:nowrap; text-align:center; font-size:10.5px;
     border-right:1px solid rgba(255,255,255,.25); border-bottom:1px solid #002f7d;
   }
   .ht-table td{
-    padding:8px 10px; text-align:center; white-space:nowrap; background:#fff; color:var(--text);
+    padding:6px 6px; text-align:center; white-space:nowrap; background:#fff; color:var(--text);
     border-right:1px solid var(--border); border-bottom:1px solid var(--border);
+    line-height:1.3;
   }
   .ht-table tbody tr:nth-child(even) td{background:#f1f5f9;}
-  .ht-table td.c-ten{text-align:left;min-width:230px;}
+  .ht-table td.c-ten{text-align:left; white-space:normal; min-width:130px; max-width:170px;}
   .ht-table th:first-child{left:0; z-index:4;}
-  .ht-table td:first-child{position:sticky; left:0; z-index:1; font-weight:800; box-shadow:2px 0 4px rgba(15,23,42,.08);}
+  .ht-table td:first-child{position:sticky; left:0; z-index:1; font-weight:700; box-shadow:2px 0 4px rgba(15,23,42,.08);}
   .ht-table tr.is-edit td{background:#fffbeb !important;}
   .ht-table tr.is-del td{background:#fef2f2 !important; color:#94a3b8; text-decoration:line-through;}
   .ht-table tr.is-del td:last-child{text-decoration:none;}
   .ht-qty{
-    width:70px;padding:7px 4px;font-size:15px;font-weight:800;text-align:center;
-    border:1.5px solid var(--border);border-radius:8px;background:#fff;color:var(--text);
-    -webkit-appearance:none;appearance:none;
+    font-family:'Roboto',sans-serif;
+    width:50px; padding:4px 2px; font-size:12px; font-weight:700; text-align:center;
+    border:1.5px solid var(--border); border-radius:7px; background:#fff; color:var(--text);
+    -webkit-appearance:none; appearance:none;
   }
   .ht-qty:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);}
   .ht-qty.over{border-color:#f59e0b;background:#fffbeb;}
   .ht-qty:disabled{opacity:.5;}
-  .ht-del{width:34px;height:34px;border:none;border-radius:9px;background:#fee2e2;color:var(--danger);font-size:14px;cursor:pointer;}
+  .ht-del{width:26px;height:26px;border:none;border-radius:7px;background:#fee2e2;color:var(--danger);font-size:11px;cursor:pointer;}
   .ht-del:active{transform:scale(.92);}
   .ht-more{position:sticky; left:12px; width:calc(100vw - 24px); margin:12px 0 0 12px;}
 </style>
@@ -616,10 +624,21 @@ let pending = loadPending(); // danh sách chờ lưu của từng tab (khôi ph
       showTab('nhan');
     });
 
+        // Safari chỉ cập nhật màu thanh trạng thái khi thẻ meta được tạo lại
+    function setThemeColor(color) {
+      var old = document.querySelector('meta[name="theme-color"]');
+      var m = document.createElement('meta');
+      m.name = 'theme-color';
+      m.content = color;
+      if (old) old.remove();
+      document.head.appendChild(m);
+    }
+
 
         function showTab(tab) {
       currentTab = tab;
       document.body.className = 'theme-' + tab; // đổi màu giao diện theo tab
+      setThemeColor(tab === 'giao' ? '#2563eb' : '#059669'); // đổi màu thanh trạng thái iPhone
       document.getElementById('tab-giao').classList.toggle('hidden', tab !== 'giao');
       document.getElementById('tab-nhan').classList.toggle('hidden', tab !== 'nhan');
 
