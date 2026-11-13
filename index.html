@@ -42,17 +42,6 @@
     box-shadow:0 8px 20px -10px var(--accent-dark);
     transition:background .25s;
   }
-  .hist-open{
-    width:100%; display:flex; align-items:center; gap:12px; cursor:pointer;
-    padding:13px 16px; border-radius:14px; color:#fff; font-size:15.5px; font-weight:800;
-    border:1px solid rgba(255,255,255,.35); background:rgba(255,255,255,.16);
-    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
-    transition:background .15s, transform .08s;
-  }
-  .hist-open:active{background:rgba(255,255,255,.3);transform:scale(.985);}
-  .hist-open i{font-size:18px;}
-  .hist-open span{flex:1;text-align:left;letter-spacing:.2px;}
-  .hist-open .hist-arrow{font-size:13px;opacity:.8;}
 
   .container{padding:16px 14px;max-width:520px;margin:0 auto;}
 
@@ -389,7 +378,7 @@
     margin-top:3px; font-size:9px; font-weight:800; color:#d97706;
     white-space:nowrap; text-transform:uppercase; letter-spacing:.2px;
   }
-    .header-row{display:flex; gap:10px;}
+      .header-row{display:flex; gap:10px;}
   .header-row .hist-open{flex:1; min-width:0;}
   .stats-open{flex:0 0 50px; justify-content:center; padding:13px 0;}
   .stats-open i{font-size:19px;}
@@ -403,6 +392,68 @@
   .stats-datebar input[type="date"]:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft);}
   .stats-sep{color:var(--muted); font-weight:700;}
   .stats-datebar .btn{flex:0 0 auto; min-height:44px; padding:0 16px;}
+    /* ===== Hai nút Lịch sử / Thống kê (dạng viên thuốc bo tròn) ===== */
+  .header-row{display:flex; gap:10px;}
+  .hist-open{
+    display:flex; align-items:center; gap:10px; cursor:pointer;
+    min-height:48px; padding:0 18px; border-radius:999px;
+    font-family:'Roboto',-apple-system,'Segoe UI',Arial,sans-serif;
+    font-size:14.5px; font-weight:700; line-height:1.5; letter-spacing:0;
+    color:var(--ink); background:#fff;
+    border:1px solid rgba(255,255,255,.95);
+    box-shadow:0 6px 14px -6px rgba(15,23,42,.45);
+    transition:transform .08s, box-shadow .15s;
+  }
+  .hist-open:active{transform:scale(.96); box-shadow:0 2px 6px -2px rgba(15,23,42,.45);}
+  .hist-open i{font-size:16px; color:var(--accent);}
+  .hist-open span{white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .header-row .hist-open:first-child{flex:1; min-width:0;}
+  .stats-open{flex:0 0 auto; width:auto;}
+
+  /* ===== Chọn khoảng ngày (to, rõ, chọn là xem luôn) ===== */
+  .stats-datebar{display:flex; gap:10px; padding:14px 14px 6px;}
+  .stats-field{flex:1; min-width:0;}
+  .stats-field small{
+    display:block; margin:0 0 5px 6px; font-size:11px; font-weight:700;
+    font-family:'Roboto',-apple-system,'Segoe UI',Arial,sans-serif;
+    color:var(--muted); text-transform:uppercase; letter-spacing:.4px;
+  }
+  .stats-field input[type="date"]{
+    display:block; width:100%; min-width:0; height:50px; padding:0 8px;
+    font-family:'Roboto',-apple-system,'Segoe UI',Arial,sans-serif;
+    font-size:16px; font-weight:700; text-align:center;
+    border-radius:14px; border:1.5px solid var(--border);
+    background:#fff; color:var(--text);
+    box-shadow:0 2px 8px rgba(15,23,42,.06);
+    -webkit-appearance:none; appearance:none;
+  }
+  .stats-field input[type="date"]::-webkit-date-and-time-value{text-align:center; min-height:1.4em;}
+  .stats-field input[type="date"]:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft);}
+
+  /* ===== Bảng thống kê: vừa khít dữ liệu, không cuộn ngang, không cố định cột ===== */
+  .st-wrap{
+    margin:10px 14px 0; width:max-content; max-width:calc(100% - 28px);
+    border-radius:14px; overflow:hidden; border:1px solid var(--border);
+    box-shadow:0 2px 10px rgba(15,23,42,.06);
+  }
+  .st-table{
+    font-family:'Roboto',-apple-system,'Segoe UI',Arial,sans-serif;
+    border-collapse:collapse; font-size:13px; width:auto;
+  }
+  .st-table th{
+    background:#0040a8; color:#fff; font-weight:700; font-size:12px;
+    padding:10px 12px; text-align:center; white-space:nowrap;
+    border-right:1px solid rgba(255,255,255,.25);
+  }
+  .st-table th:last-child, .st-table td:last-child{border-right:none;}
+  .st-table td{
+    padding:9px 12px; text-align:center; white-space:nowrap; background:#fff;
+    color:var(--text); border-right:1px solid var(--border); border-bottom:1px solid var(--border);
+  }
+  .st-table td.c-name{text-align:left; white-space:normal; max-width:160px;}
+  .st-table tbody tr:nth-child(even) td{background:#f1f5f9;}
+  .st-table tr.st-total td{background:#e0e7ff; font-weight:800; border-bottom:none;}
+
 </style>
 </head>
 <body>
@@ -412,10 +463,10 @@
       <button class="hist-open" onclick="openHistory()">
         <i class="fa-solid fa-clock-rotate-left"></i>
         <span id="histBtnLabel">Lịch sử nhận vật tư</span>
-        <i class="fa-solid fa-chevron-right hist-arrow"></i>
       </button>
-      <button class="hist-open stats-open" onclick="openStats()" aria-label="Thống kê">
+      <button class="hist-open stats-open" onclick="openStats()">
         <i class="fa-solid fa-chart-column"></i>
+        <span>Thống kê</span>
       </button>
     </div>
   </header>
@@ -578,10 +629,14 @@
       <button class="hist-icon-btn" onclick="loadStats()" aria-label="Tải lại"><i class="fa-solid fa-rotate"></i></button>
     </div>
     <div class="stats-datebar">
-      <input id="statsFrom" type="date">
-      <span class="stats-sep">–</span>
-      <input id="statsTo" type="date">
-      <button class="btn btn-soft" onclick="applyStatsRange()"><i class="fa-solid fa-calendar-check"></i> Xem</button>
+      <div class="stats-field">
+        <small>Từ ngày</small>
+        <input id="statsFrom" type="date" onchange="applyStatsRange()">
+      </div>
+      <div class="stats-field">
+        <small>Đến ngày</small>
+        <input id="statsTo" type="date" onchange="applyStatsRange()">
+      </div>
     </div>
     <div class="hist-body" id="statsBody"></div>
   </div>
@@ -1862,16 +1917,16 @@ async function handlePhotos(tab, input) {
       let tongNhan = 0, tongGiao = 0;
       const rowsHtml = stats.rows.map(function (r) {
         tongNhan += r.nhan; tongGiao += r.giao;
-        return '<tr><td>' + escHtml(r.msnv || '-') + '</td>' +
-          '<td class="c-ten">' + escHtml(r.nguoi) + '</td>' +
+        return '<tr><td><b>' + escHtml(r.msnv || '-') + '</b></td>' +
+          '<td class="c-name">' + escHtml(r.nguoi) + '</td>' +
           '<td>' + r.nhan + '</td>' +
           '<td>' + r.giao + '</td></tr>';
       }).join('');
-      body.innerHTML = '<table class="ht-table"><thead><tr>' +
+      body.innerHTML = '<div class="st-wrap"><table class="st-table"><thead><tr>' +
         '<th>MSNV</th><th>Người dùng</th><th>Nhận hàng</th><th>Giao hàng</th>' +
         '</tr></thead><tbody>' + rowsHtml +
-        '<tr style="font-weight:800;background:#f1f5f9;"><td colspan="2">Tổng cộng</td><td>' + tongNhan + '</td><td>' + tongGiao + '</td></tr>' +
-        '</tbody></table>';
+        '<tr class="st-total"><td colspan="2">Tổng cộng</td><td>' + tongNhan + '</td><td>' + tongGiao + '</td></tr>' +
+        '</tbody></table></div>';
     }
 
     let toastTimer;
