@@ -332,15 +332,26 @@
   .btn-row .btn-danger{flex:1;}
 
     /* ===== Lịch sử dạng bảng (header xanh đậm, Roboto, chữ nhỏ) ===== */
-  .hist-body{padding:8px 0 110px !important; overflow:auto; -webkit-overflow-scrolling:touch;}
+  .hist-body{
+    padding:8px 0 110px !important; overflow:auto; -webkit-overflow-scrolling:touch;
+    -webkit-transform: translateZ(0); transform: translateZ(0);
+  }
   .ht-table{
     font-family:'Roboto',-apple-system,'Segoe UI',Arial,sans-serif;
     border-collapse:separate; border-spacing:0; font-size:11px; min-width:640px; width:100%;
   }
+    .ht-table thead{ position: sticky; top:0; z-index:3; isolation:isolate; }
   .ht-table th{
-    position:sticky; top:0; z-index:2; background:#0040a8; color:#fff; font-weight:700;
+    position: sticky; top:0; z-index:3; background:#0040a8; color:#fff; font-weight:700;
     padding:8px 6px; white-space:nowrap; text-align:center; font-size:10.5px;
-    border-right:1px solid rgba(255,255,255,.25); border-bottom:1px solid #002f7d;
+    border-right:1px solid rgba(255,255,255,.25);
+    box-shadow: 0 -1px 0 #0040a8, inset 0 -1px 0 #002f7d; /* bịt khe hở phía trên thay vì border-bottom */
+    background-clip: padding-box;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    will-change: transform;
   }
   .ht-table td{
     padding:6px 6px; text-align:center; white-space:nowrap; background:#fff; color:var(--text);
@@ -366,16 +377,47 @@
   .ht-del{width:26px;height:26px;border:none;border-radius:7px;background:#fee2e2;color:var(--danger);font-size:11px;cursor:pointer;}
   .ht-del:active{transform:scale(.92);}
   .ht-more{position:sticky; left:12px; width:calc(100vw - 24px); margin:12px 0 0 12px;}
+    .ht-stt{
+    font-family:'Roboto',sans-serif;
+    width:52px; padding:4px 2px; font-size:12px; font-weight:700; text-align:center;
+    border:1.5px solid var(--border); border-radius:7px; background:#fff; color:var(--text);
+    -webkit-appearance:none; appearance:none;
+  }
+  .ht-stt:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);}
+  .ht-stt:disabled{opacity:.5;}
+  .stt-move-tag{
+    margin-top:3px; font-size:9px; font-weight:800; color:#d97706;
+    white-space:nowrap; text-transform:uppercase; letter-spacing:.2px;
+  }
+    .header-row{display:flex; gap:10px;}
+  .header-row .hist-open{flex:1; min-width:0;}
+  .stats-open{flex:0 0 50px; justify-content:center; padding:13px 0;}
+  .stats-open i{font-size:19px;}
+
+  .stats-datebar{display:flex; align-items:center; gap:8px; padding:12px 14px 4px;}
+  .stats-datebar input[type="date"]{
+    flex:1; min-width:0; padding:11px 10px; font-size:14px; border-radius:12px;
+    border:1.5px solid var(--border); background:#fff; color:var(--text);
+    -webkit-appearance:none; appearance:none;
+  }
+  .stats-datebar input[type="date"]:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft);}
+  .stats-sep{color:var(--muted); font-weight:700;}
+  .stats-datebar .btn{flex:0 0 auto; min-height:44px; padding:0 16px;}
 </style>
 </head>
 <body>
 
   <header>
-    <button class="hist-open" onclick="openHistory()">
-      <i class="fa-solid fa-clock-rotate-left"></i>
-      <span id="histBtnLabel">Lịch sử nhận vật tư</span>
-      <i class="fa-solid fa-chevron-right hist-arrow"></i>
-    </button>
+    <div class="header-row">
+      <button class="hist-open" onclick="openHistory()">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+        <span id="histBtnLabel">Lịch sử nhận vật tư</span>
+        <i class="fa-solid fa-chevron-right hist-arrow"></i>
+      </button>
+      <button class="hist-open stats-open" onclick="openStats()" aria-label="Thống kê">
+        <i class="fa-solid fa-chart-column"></i>
+      </button>
+    </div>
   </header>
 
   <div class="container">
@@ -526,6 +568,22 @@
       <button class="btn btn-ghost" id="histDiscard" onclick="discardHistChanges()"><i class="fa-solid fa-rotate-left"></i> Hoàn tác</button>
       <button class="btn btn-primary" id="histSave" onclick="saveHistChanges()"><i class="fa-solid fa-floppy-disk"></i> Lưu thay đổi (<span id="histChangeCount">0</span>)</button>
     </div>
+  </div>
+
+  <!-- ===== THỐNG KÊ theo người ===== -->
+  <div id="statsOverlay" class="hist-overlay hidden">
+    <div class="hist-top">
+      <button class="hist-icon-btn" onclick="closeStats()" aria-label="Đóng"><i class="fa-solid fa-arrow-left"></i></button>
+      <div class="hist-title"><b>Thống kê theo người</b><small>Nhận vật tư &amp; Giao hàng</small></div>
+      <button class="hist-icon-btn" onclick="loadStats()" aria-label="Tải lại"><i class="fa-solid fa-rotate"></i></button>
+    </div>
+    <div class="stats-datebar">
+      <input id="statsFrom" type="date">
+      <span class="stats-sep">–</span>
+      <input id="statsTo" type="date">
+      <button class="btn btn-soft" onclick="applyStatsRange()"><i class="fa-solid fa-calendar-check"></i> Xem</button>
+    </div>
+    <div class="hist-body" id="statsBody"></div>
   </div>
 
   <!-- ===== Hộp thoại xác nhận ===== -->
@@ -1557,12 +1615,21 @@ async function handlePhotos(tab, input) {
       const isDel = !!hist.dels[r.row];
       const ed = hist.edits[r.row];
       const sl = ed ? ed.sl : r.sl;
+      const sttVal = (ed && ed.sttNew != null) ? ed.sttNew : r.stt;
+      const sttChanged = !!(ed && String(ed.sttNew) !== String(r.stt));
+      const lsxSttDisplay = sttChanged ? (r.lsx + '-' + ed.sttNew) : r.lsxStt;
       const over = Number(r.slDh) > 0 && Number(sl) > Number(r.slDh);
       const slDh = (r.slDh !== '' && r.slDh != null) ? r.slDh : '';
       return '<tr id="hr-' + r.row + '" class="' + (isDel ? 'is-del ' : '') + (ed ? 'is-edit' : '') + '">' +
-        '<td>' + escHtml(r.lsxStt) + '</td>' +
+        '<td>' + escHtml(lsxSttDisplay) + '</td>' +
         '<td>' + escHtml(r.lsx) + '</td>' +
-        '<td>' + escHtml(r.stt) + '</td>' +
+        '<td><input class="ht-stt" type="text" inputmode="numeric" value="' + escHtml(sttVal) + '" ' +
+          (isDel ? 'disabled ' : '') +
+          'oninput="onHistSttInput(' + r.row + ',this)" ' +
+          'onchange="onHistSttChange(' + r.row + ',this)" ' +
+          'onkeydown="if(event.key===\'Enter\'){this.blur();}">' +
+          (sttChanged ? '<div class="stt-move-tag"><i class="fa-solid fa-arrow-down"></i> cuối bảng</div>' : '') +
+        '</td>' +
         '<td>' + escHtml(r.msct) + '</td>' +
         '<td class="c-ten">' + escHtml(r.tenChiTiet) + '</td>' +
         '<td>' + escHtml(slDh) + '</td>' +
@@ -1578,14 +1645,34 @@ async function handlePhotos(tab, input) {
         '</tr>';
     }
 
+    function ensureHistEdit(r) {
+      if (!hist.edits[r.row]) {
+        hist.edits[r.row] = {
+          row: r.row, lsxStt: r.lsxStt, ts: r.ts,
+          sl0: r.sl, sl: r.sl,
+          lsx: r.lsx, sttOld: r.stt, sttNew: r.stt
+        };
+      }
+      return hist.edits[r.row];
+    }
+
+    function pruneHistEdit(row, r) {
+      const ed = hist.edits[row];
+      if (!ed) return;
+      const slChanged = Number(ed.sl) !== Number(r.sl);
+      const sttChanged = String(ed.sttNew) !== String(r.stt);
+      if (!slChanged && !sttChanged) delete hist.edits[row];
+    }
+
     function onHistQtyInput(row, el) {
       const r = findHistRow(row);
       if (!r) return;
       const v = String(el.value).trim(), n = Number(v);
       if (!v || isNaN(n) || n <= 0) return;
-      const changed = n !== Number(r.sl);
-      if (changed) hist.edits[row] = { row: r.row, lsxStt: r.lsxStt, ts: r.ts, sl0: r.sl, sl: v };
-      else delete hist.edits[row];
+      const ed = ensureHistEdit(r);
+      ed.sl = v;
+      pruneHistEdit(row, r);
+      const changed = !!hist.edits[row];
       const tr = document.getElementById('hr-' + row);
       if (tr) tr.classList.toggle('is-edit', changed);
       el.classList.toggle('over', Number(r.slDh) > 0 && n > Number(r.slDh));
@@ -1604,6 +1691,45 @@ async function handlePhotos(tab, input) {
         return;
       }
       if (Number(r.slDh) > 0 && n > Number(r.slDh)) showToast('Lưu ý: số lượng lớn hơn SL/ĐH (' + r.slDh + ').', true);
+    }
+
+    function onHistSttInput(row, el) {
+      const r = findHistRow(row);
+      if (!r) return;
+      const v = String(el.value).trim();
+      if (!v) return;
+      const ed = ensureHistEdit(r);
+      ed.sttNew = v;
+      pruneHistEdit(row, r);
+      const changed = !!hist.edits[row];
+      const tr = document.getElementById('hr-' + row);
+      if (tr) tr.classList.toggle('is-edit', changed);
+      const firstCell = tr ? tr.querySelector('td:first-child') : null;
+      if (firstCell) firstCell.textContent = (v === r.stt) ? r.lsxStt : (r.lsx + '-' + v);
+      updateHistFoot();
+    }
+
+    function onHistSttChange(row, el) {
+      const r = findHistRow(row);
+      if (!r) return;
+      const v = String(el.value).trim();
+      if (!v) {
+        showToast('STT không được để trống.', true);
+        const ed = hist.edits[row];
+        el.value = (ed && ed.sttNew != null) ? ed.sttNew : r.stt;
+        return;
+      }
+      if (v !== r.stt) {
+        const trung = hist.rows.some(function (x) {
+          if (x.row === row || hist.dels[x.row]) return false;
+          const xEd = hist.edits[x.row];
+          const xStt = (xEd && xEd.sttNew != null) ? xEd.sttNew : x.stt;
+          return x.lsx === r.lsx && String(xStt) === v;
+        });
+        if (trung) showToast('Lưu ý: đã có dòng khác với LSX-STT là ' + r.lsx + '-' + v + '.', true);
+      }
+      const tr = document.getElementById('hr-' + row);
+      if (tr) tr.outerHTML = histRowHtml(r);
     }
 
     function toggleHistDelete(row) {
@@ -1642,13 +1768,17 @@ async function handlePhotos(tab, input) {
       const dels = Object.keys(hist.dels).map(function (k) { return hist.dels[k]; });
       if (!edits.length && !dels.length) return;
 
+      const sttMoves = edits.filter(function (e) { return String(e.sttNew) !== String(e.sttOld); }).length;
+      const qtyOnly = edits.length - sttMoves;
+
       const parts = [];
-      if (edits.length) parts.push('sửa ' + edits.length + ' mục');
+      if (qtyOnly) parts.push('sửa số lượng ' + qtyOnly + ' mục');
+      if (sttMoves) parts.push('đổi STT ' + sttMoves + ' mục (chuyển xuống cuối bảng)');
       if (dels.length) parts.push('xoá ' + dels.length + ' mục');
       const ok = await askConfirm(
         'Lưu thay đổi vào Sheet?',
-        'Sẽ ' + parts.join(' và ') + ' trực tiếp trên Google Sheet.' + (dels.length ? ' Dòng đã xoá không thể khôi phục.' : ''),
-        'Lưu', dels.length > 0
+        'Sẽ ' + parts.join(', ') + ' trực tiếp trên Google Sheet.' + ((dels.length || sttMoves) ? ' Không thể khôi phục.' : ''),
+        'Lưu', (dels.length > 0 || sttMoves > 0)
       );
       if (!ok) return;
 
@@ -1664,6 +1794,84 @@ async function handlePhotos(tab, input) {
           setHistSaving(false);
           showToast('Lưu thất bại: ' + err.message, true, 6000);
         });
+    }
+
+    // ================= THỐNG KÊ THEO NGƯỜI =================
+    const stats = { rows: [], loading: false, error: '' };
+
+    function todayStr() {
+      const d = new Date();
+      const p = function (n) { return (n < 10 ? '0' : '') + n; };
+      return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+    }
+
+    function openStats() {
+      ['giao', 'nhan'].forEach(function (t) { if (scannerRunning[t]) stopScanner(t); });
+      const t = todayStr();
+      document.getElementById('statsFrom').value = t;
+      document.getElementById('statsTo').value = t;
+      document.getElementById('statsOverlay').classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+      loadStats();
+    }
+
+    function closeStats() {
+      document.getElementById('statsOverlay').classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+
+    function applyStatsRange() {
+      const from = document.getElementById('statsFrom').value;
+      const to = document.getElementById('statsTo').value;
+      if (from && to && from > to) { showToast('Khoảng ngày không hợp lệ.', true); return; }
+      loadStats();
+    }
+
+    function loadStats() {
+      stats.loading = true; stats.error = '';
+      renderStats();
+      const from = document.getElementById('statsFrom').value;
+      const to = document.getElementById('statsTo').value;
+      callApi('getStats', { from: from, to: to }).then(function (res) {
+        stats.loading = false;
+        stats.rows = res.rows || [];
+        renderStats();
+      }).catch(function (err) {
+        stats.loading = false;
+        stats.rows = [];
+        stats.error = err.message || 'Không tải được thống kê.';
+        renderStats();
+      });
+    }
+
+    function renderStats() {
+      const body = document.getElementById('statsBody');
+      if (stats.loading) {
+        body.innerHTML = '<div class="hist-empty"><i class="fa-solid fa-spinner fa-spin"></i>Đang tải dữ liệu...</div>';
+        return;
+      }
+      if (stats.error) {
+        body.innerHTML = '<div class="hist-empty"><i class="fa-solid fa-triangle-exclamation"></i>' + escHtml(stats.error) +
+          '<br><br><button class="btn btn-soft" onclick="loadStats()"><i class="fa-solid fa-rotate"></i> Thử lại</button></div>';
+        return;
+      }
+      if (!stats.rows.length) {
+        body.innerHTML = '<div class="hist-empty"><i class="fa-regular fa-folder-open"></i>Không có dữ liệu trong khoảng ngày đã chọn.</div>';
+        return;
+      }
+      let tongNhan = 0, tongGiao = 0;
+      const rowsHtml = stats.rows.map(function (r) {
+        tongNhan += r.nhan; tongGiao += r.giao;
+        return '<tr><td>' + escHtml(r.msnv || '-') + '</td>' +
+          '<td class="c-ten">' + escHtml(r.nguoi) + '</td>' +
+          '<td>' + r.nhan + '</td>' +
+          '<td>' + r.giao + '</td></tr>';
+      }).join('');
+      body.innerHTML = '<table class="ht-table"><thead><tr>' +
+        '<th>MSNV</th><th>Người dùng</th><th>Nhận hàng</th><th>Giao hàng</th>' +
+        '</tr></thead><tbody>' + rowsHtml +
+        '<tr style="font-weight:800;background:#f1f5f9;"><td colspan="2">Tổng cộng</td><td>' + tongNhan + '</td><td>' + tongGiao + '</td></tr>' +
+        '</tbody></table>';
     }
 
     let toastTimer;
