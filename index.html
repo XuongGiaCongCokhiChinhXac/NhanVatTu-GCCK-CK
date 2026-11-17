@@ -1339,12 +1339,23 @@ function stopScanner(tab) {
       pending[tab] = [];
       renderPending(tab);
 
+      trySubmitBatch(tab, nguoi, items, 0);
+    }
+
+    // Tự thử lại tối đa 2 lần nếu lỗi là do hệ thống đang bận (tranh chấp khóa tạm thời),
+    // thay vì bắt người dùng tự bấm lưu lại ngay.
+    function trySubmitBatch(tab, nguoi, items, attempt) {
       callApi('submitBatch', { type: tab, nguoi: nguoi, items: items })
         .then(function (res) {
           showToast(res.message);
         })
         .catch(function (err) {
-          // Lưu thất bại -> trả các mục về danh sách chờ để bấm lưu lại
+          const isBusy = /bận|khóa|lock|timeout/i.test(err.message || '');
+          if (isBusy && attempt < 2) {
+            showToast('Hệ thống đang bận, tự động thử lưu lại...', false, 2500);
+            setTimeout(function () { trySubmitBatch(tab, nguoi, items, attempt + 1); }, 1200 * (attempt + 1));
+            return;
+          }
           pending[tab] = items.concat(pending[tab]);
           renderPending(tab);
           showToast('Lưu thất bại, đã trả ' + items.length + ' mục về danh sách chờ. ' + err.message, true, 6000);
