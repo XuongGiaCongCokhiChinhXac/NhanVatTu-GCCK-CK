@@ -181,6 +181,7 @@
   .toast i{font-size:18px;color:#4ade80;}
   .toast.error{background:var(--danger);}
   .toast.error i{color:#fff;}
+  .toast.info i{color:#fbbf24;}
   .toast.show{opacity:1;transform:translate(-50%,0);}
 
   .status-ok{color:var(--accent-dark);font-weight:700;}
@@ -1339,26 +1340,41 @@ function stopScanner(tab) {
       pending[tab] = [];
       renderPending(tab);
 
-      trySubmitBatch(tab, nguoi, items, 0);
+      // Mã định danh lô: server dựa vào đây để không ghi trùng khi gửi lại
+      const batchId = 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      enqueueSave(function () { return trySubmitBatch(tab, nguoi, items, batchId, 0); });
     }
 
     // Tự thử lại tối đa 2 lần nếu lỗi là do hệ thống đang bận (tranh chấp khóa tạm thời),
     // thay vì bắt người dùng tự bấm lưu lại ngay.
-    function trySubmitBatch(tab, nguoi, items, attempt) {
-      callApi('submitBatch', { type: tab, nguoi: nguoi, items: items })
+    const MAX_RETRY = 4; // số lần tự thử lại khi hệ thống bận / mất mạng thoáng qua
+
+    // Hàng đợi lưu: các lượt lưu trên máy này chạy lần lượt, không tự tranh khóa của nhau
+    let saveChain = Promise.resolve();
+    function enqueueSave(fn) {
+      saveChain = saveChain.then(fn).catch(function () {});
+      return saveChain;
+    }
+
+    function trySubmitBatch(tab, nguoi, items, batchId, attempt) {
+      return callApi('submitBatch', { type: tab, nguoi: nguoi, items: items, batchId: batchId })
         .then(function (res) {
           showToast(res.message);
         })
         .catch(function (err) {
-          const isBusy = /bận|khóa|lock|timeout/i.test(err.message || '');
-          if (isBusy && attempt < 2) {
-            showToast('Hệ thống đang bận, tự động thử lưu lại...', false, 2500);
-            setTimeout(function () { trySubmitBatch(tab, nguoi, items, attempt + 1); }, 1200 * (attempt + 1));
-            return;
+          const msg = (err && err.message) || '';
+          // Gửi lại an toàn vì server đã chống ghi trùng bằng batchId
+          const retryable = /bận|khóa|lock|timeout|failed to fetch|load failed|network/i.test(msg);
+          if (retryable && attempt < MAX_RETRY) {
+            const wait = 1500 * (attempt + 1) + Math.floor(Math.random() * 1000);
+            showToast('Hệ thống đang bận, đang tự lưu lại (' + (attempt + 1) + '/' + MAX_RETRY + ')...', false, wait + 2000, true);
+            return new Promise(function (r) { setTimeout(r, wait); }).then(function () {
+              return trySubmitBatch(tab, nguoi, items, batchId, attempt + 1);
+            });
           }
           pending[tab] = items.concat(pending[tab]);
           renderPending(tab);
-          showToast('Lưu thất bại, đã trả ' + items.length + ' mục về danh sách chờ. ' + err.message, true, 6000);
+          showToast('Lưu thất bại, đã trả ' + items.length + ' mục về danh sách chờ. ' + msg, true, 6000);
         });
     }
 
@@ -1941,11 +1957,13 @@ async function handlePhotos(tab, input) {
     }
 
     let toastTimer;
-        function showToast(msg, isError, ms) {
+        function showToast(msg, isError, ms, isInfo) {
       const t = document.getElementById('toast');
-      t.innerHTML = '<i class="fa-solid ' + (isError ? 'fa-triangle-exclamation' : 'fa-circle-check') + '"></i><span></span>';
+      const ico = isError ? 'fa-triangle-exclamation' : (isInfo ? 'fa-spinner fa-spin' : 'fa-circle-check');
+      t.innerHTML = '<i class="fa-solid ' + ico + '"></i><span></span>';
       t.querySelector('span').textContent = msg;
       t.classList.toggle('error', !!isError);
+      t.classList.toggle('info', !!isInfo);
       t.classList.add('show');
       clearTimeout(toastTimer);
       toastTimer = setTimeout(function () { t.classList.remove('show'); }, ms || 3000);
